@@ -1,0 +1,1056 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Trustvault — Savings Management</title>
+
+  <!-- Tailwind CDN (for simplicity) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.3.0/chart.umd.min.js"></script>
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+
+  <style>
+    /* Small visual tuning beyond default Tailwind */
+    body { background: #f4f7fb; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+    .card { background: white; box-shadow: 0 6px 18px rgba(12, 20, 35, 0.06); border-radius: 0.75rem; }
+    /* payment badge colors */
+    .pm-bank { background:#e6f0ff;color:#1e3a8a }       /* blue */
+    .pm-cash { background:#ecfdf5;color:#065f46 }       /* green */
+    .pm-card { background:#f5f3ff;color:#6d28d9 }       /* purple */
+    .pm-paypal { background:#eef2ff;color:#0f172a }     /* dark-blue look */
+    .pm-empesa { background:#ecfdf5;color:#047857 }     /* mpesa-green */
+    /* modal backdrop fix */
+    .modal-backdrop { background: rgba(2,6,23,0.45); }
+    /* small table fix */
+    table th, table td { padding: .5rem .75rem; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- App container -->
+<div id="app" class="flex min-h-screen">
+
+  <!-- Sidebar (off-canvas on small screens) -->
+  <aside id="sidebar" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="sidebarTitle" class="w-64 p-6 bg-slate-900 text-white flex flex-col fixed left-0 top-0 h-full transform -translate-x-full md:translate-x-0 md:relative md:top-auto md:left-auto md:h-auto md:flex transition-transform duration-200 ease-in-out z-50">
+    <div class="flex items-center gap-3 mb-6 justify-between">
+      <div class="flex items-center gap-3">
+        <img id="siteLogo" src="jlc.jpg" alt="Trustvault logo" class="w-16 h-16 object-cover rounded-full" />
+        <div>
+        <div class="font-bold text-lg">TRUSTVAULT</div>
+        <div class="text-xs text-slate-300">Where money is safe</div>
+      </div>
+      </div>
+      <!-- Close on mobile -->
+      <button id="sidebarCloseBtn" class="md:hidden text-slate-300 p-2 rounded hover:bg-white/5" aria-label="Close menu"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <nav class="flex-1 space-y-1 text-sm">
+      <button data-page="dashboard" class="w-full text-left sidebar-btn active flex items-center gap-3 px-3 py-2 rounded">
+        <i class="fa-solid fa-gauge"></i><span>Dashboard</span>
+      </button>
+      <button data-page="members" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
+        <i class="fa-solid fa-users"></i><span>Members</span>
+      </button>
+      <button data-page="savings" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
+        <i class="fa-solid fa-piggy-bank"></i><span>Savings</span>
+      </button>
+      <button data-page="messages" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
+        <i class="fa-solid fa-comments"></i><span>Messages</span><span id="msgDot" class="ml-auto text-red-400 hidden"><i class="fa-solid fa-circle-exclamation"></i></span>
+      </button>
+      <button data-page="statistics" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
+        <i class="fa-solid fa-chart-line"></i><span>Statistics</span>
+      </button>
+      <button data-page="invoices" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
+        <i class="fa-regular fa-file-invoice"></i><span>Invoices</span>
+      </button>
+      <button data-page="todo" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
+        <i class="fa-solid fa-list-check"></i><span>To Do</span>
+      </button>
+      <button data-page="finances" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
+        <i class="fa-solid fa-wallet"></i><span>Finances</span>
+      </button>
+      <button data-page="help" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
+        <i class="fa-solid fa-circle-info"></i><span>Help & Center</span>
+      </button>
+      <button data-page="settings" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
+        <i class="fa-solid fa-gear"></i><span>Settings</span>
+      </button>
+    </nav>
+
+    <div class="mt-6 text-xs text-slate-400">
+      <div>Admin: <span id="adminNameShort" class="text-white">Admin</span></div>
+      <div class="mt-2">Currency: <span id="currencyShort" class="text-white">KES</span></div>
+      <button id="logoutBtn" class="mt-4 w-full bg-slate-700 text-white py-2 rounded text-sm">Log Out</button>
+    </div>
+  </aside>
+
+  <!-- Mobile header (visible on small screens) -->
+  <div class="w-full bg-transparent md:hidden p-3 flex items-center justify-between">
+    <button id="mobileMenuBtn" type="button" class="p-2 bg-white/10 text-white rounded"><i class="fa-solid fa-bars"></i></button>
+    <div class="flex items-center gap-3">
+      <div id="todayBadgeMobile" class="px-3 py-1 bg-white rounded text-slate-700 text-sm shadow">Today</div>
+      <div class="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow"><i class="fa-solid fa-user"></i></div>
+    </div>
+  </div>
+
+  <!-- Backdrop for mobile sidebar -->
+  <div id="sidebarBackdrop" class="fixed inset-0 bg-black/50 z-40 hidden md:hidden"></div>
+
+  <!-- Main content -->
+  <div id="mainContent" class="flex-1 p-6">
+    <!-- Header -->
+    <header class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-semibold">Welcome Back, Alpha</h1>
+        <p class="text-sm text-slate-500">save today secure tomorrow</p>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <div id="todayBadge" class="px-3 py-1 bg-white rounded text-slate-700 text-sm shadow">Today</div>
+        <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow"><i class="fa-solid fa-user"></i></div>
+      </div>
+    </header>
+
+    <!-- PAGES (single-file app) -->
+    <main id="pages" class="space-y-6">
+
+      <!-- Dashboard -->
+      <section id="page-dashboard" class="space-y-4">
+        <div class="grid grid-cols-12 gap-4">
+          <!-- KPIs -->
+          <div class="col-span-12 md:col-span-3">
+            <div class="card p-4">
+              <div class="text-xs text-slate-400">Members</div>
+              <div id="kpiMembers" class="text-xl font-bold">0</div>
+              <div class="text-xs text-slate-500">Total registered</div>
+            </div>
+          </div>
+
+          <div class="col-span-12 md:col-span-3">
+            <div class="card p-4">
+              <div class="text-xs text-slate-400">Savings</div>
+              <div id="kpiSavings" class="text-xl font-bold">KES 0</div>
+              <div class="text-xs text-slate-500">Total saved</div>
+            </div>
+          </div>
+
+          <div class="col-span-12 md:col-span-3">
+            <div class="card p-4">
+              <div class="text-xs text-slate-400">Recently Added</div>
+              <div id="kpiRecent" class="text-xl font-bold">—</div>
+              <div class="text-xs text-slate-500">Last member</div>
+            </div>
+          </div>
+
+          <div class="col-span-12 md:col-span-3">
+            <div class="card p-4">
+              <div class="text-xs text-slate-400">Target</div>
+              <div id="kpiTarget" class="text-xl font-bold">KES 0</div>
+              <div id="kpiTargetSub" class="text-xs text-slate-500">0 days est.</div>
+            </div>
+          </div>
+
+          <!-- Charts (reduced size for space) -->
+          <div class="col-span-12 md:col-span-5">
+            <div class="card p-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-sm font-semibold">Member Savings Share</div>
+                  <div class="text-xs text-slate-500">% of total saved per member</div>
+                </div>
+                <div class="text-xs text-slate-400">Live</div>
+              </div>
+              <canvas id="donut" class="mt-3" style="max-height:200px"></canvas>
+            </div>
+          </div>
+
+          <div class="col-span-12 md:col-span-7">
+            <div class="card p-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-sm font-semibold">Daily Performance</div>
+                  <div class="text-xs text-slate-500">Last 14 days</div>
+                </div>
+                <div class="text-xs text-slate-400">Daily</div>
+              </div>
+              <canvas id="line" class="mt-3" style="max-height:200px"></canvas>
+            </div>
+          </div>
+
+          <!-- Recent transactions (visible) -->
+          <div class="col-span-12">
+            <div class="card p-4">
+              <div class="flex items-center justify-between mb-3">
+                <div>
+                  <div class="text-sm font-semibold">Recent Transactions</div>
+                  <div class="text-xs text-slate-500">Latest deposits & withdrawals</div>
+                </div>
+                <div>
+                  <button id="clearMessages" class="text-sm bg-slate-100 px-3 py-1 rounded">Clear messages</button>
+                </div>
+              </div>
+
+              <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                  <thead class="text-xs text-slate-500">
+                    <tr><th>#</th><th>Member</th><th>Type</th><th>Amount</th><th>Date</th><th>Method</th></tr>
+                  </thead>
+                  <tbody id="recentTbody" class="text-sm"></tbody>
+                </table>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Members -->
+      <section id="page-members" class="hidden">
+        <div class="card p-4">
+          <div class="flex items-center justify-between mb-4">
+            <div><h2 class="text-lg font-semibold">Members</h2><div class="text-xs text-slate-500">Add, edit or remove members</div></div>
+            <div><button id="addMemberBtn" class="bg-sky-600 text-white px-3 py-1 rounded"><i class="fa-solid fa-plus mr-2"></i>Add member</button></div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left">
+              <thead class="text-xs text-slate-500"><tr><th>#</th><th>Name</th><th>Phone</th><th>Joined</th><th>Saved</th><th>Actions</th></tr></thead>
+              <tbody id="membersTbody" class="text-sm"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Savings -->
+      <section id="page-savings" class="hidden">
+        <div class="grid md:grid-cols-3 gap-4">
+          <div class="card p-4">
+            <div class="text-sm font-semibold">Make Transaction</div>
+            <div class="text-xs text-slate-500 mb-3">Choose member and deposit/withdraw</div>
+            <select id="memberSelect" class="w-full p-2 border rounded mb-3"></select>
+
+            <div class="flex gap-2">
+              <button id="depositBtn" class="flex-1 bg-emerald-600 text-white p-2 rounded"><i class="fa-solid fa-arrow-down mr-2"></i>Deposit</button>
+              <button id="withdrawBtn" class="flex-1 bg-rose-500 text-white p-2 rounded"><i class="fa-solid fa-arrow-up mr-2"></i>Withdraw</button>
+            </div>
+
+            <div class="mt-4">
+              <div class="text-xs text-slate-400">Selected balance</div>
+              <div id="selectedBalance" class="text-lg font-semibold">KES 0</div>
+            </div>
+          </div>
+
+          <div class="card p-4 md:col-span-2">
+            <div class="text-sm font-semibold">Transactions</div>
+            <div class="text-xs text-slate-500 mb-3">All transactions</div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left">
+                <thead class="text-xs text-slate-500"><tr><th>#</th><th>Member</th><th>Type</th><th>Amount</th><th>Date</th><th>Method</th><th>Action</th></tr></thead>
+                <tbody id="transactionsTbody" class="text-sm"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Messages -->
+      <section id="page-messages" class="hidden">
+        <div class="card p-4">
+          <div class="flex items-center justify-between mb-3">
+            <div><h2 class="text-lg font-semibold">Messages</h2><div class="text-xs text-slate-500">Activity, warnings, reminders</div></div>
+            <div><button id="filterMsgs" class="px-3 py-1 bg-slate-100 rounded text-sm">Filter</button></div>
+          </div>
+
+          <div id="messagesList" class="space-y-3"></div>
+        </div>
+      </section>
+
+      <!-- Statistics -->
+      <section id="page-statistics" class="hidden">
+        <div class="card p-4">
+          <h2 class="text-lg font-semibold">Statistics</h2>
+          <div class="text-xs text-slate-500 mb-3">Member breakdown & progress</div>
+          <div id="statsList" class="space-y-2"></div>
+        </div>
+      </section>
+
+      <!-- Invoices -->
+      <section id="page-invoices" class="hidden">
+        <div class="card p-4">
+          <h2 class="text-lg font-semibold">Invoices / Pending</h2>
+          <div class="text-xs text-slate-500 mb-3">Daily expected deposits status</div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left">
+              <thead class="text-xs text-slate-500"><tr><th>#</th><th>Member</th><th>Date</th><th>Expected</th><th>Status</th><th>Action</th></tr></thead>
+              <tbody id="invoicesTbody" class="text-sm"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- To Do -->
+      <section id="page-todo" class="hidden">
+        <div class="card p-4">
+          <div class="flex items-center justify-between mb-3">
+            <div><h2 class="text-lg font-semibold">To Do / Notes</h2><div class="text-xs text-slate-500">Notes, events, meeting minutes</div></div>
+            <div><button id="addTodoBtn" class="px-3 py-1 bg-sky-600 text-white rounded text-sm">Add note</button></div>
+          </div>
+          <div id="todoList" class="space-y-2"></div>
+        </div>
+      </section>
+
+      <!-- Finances -->
+      <section id="page-finances" class="hidden">
+        <div class="card p-4">
+          <h2 class="text-lg font-semibold">Finances</h2>
+          <div class="text-xs text-slate-500 mb-3">Target vs Achieved and today's savings</div>
+          <div class="grid grid-cols-3 gap-4">
+            <div>
+              <div class="text-xs text-slate-400">Target</div>
+              <div id="finTarget" class="font-bold text-lg">KES 0</div>
+            </div>
+            <div>
+              <div class="text-xs text-slate-400">Achieved</div>
+              <div id="finAchieved" class="font-bold text-lg">KES 0</div>
+            </div>
+            <div>
+              <div class="text-xs text-slate-400">Saved Today</div>
+              <div id="finToday" class="font-bold text-lg">KES 0</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Help & Center -->
+      <section id="page-help" class="hidden">
+        <div class="card p-4">
+          <h2 class="text-lg font-semibold">Help & Center</h2>
+          <div class="text-xs text-slate-500 mb-3">How to perform common tasks</div>
+
+          <div class="grid md:grid-cols-2 gap-3">
+            <div class="p-3 border rounded">
+              <div class="font-semibold">Add a Member</div>
+              <div class="text-xs text-slate-500">Navigate to Members → Add member → fill name & phone → Save.</div>
+            </div>
+
+            <div class="p-3 border rounded">
+              <div class="font-semibold">Deposit</div>
+              <div class="text-xs text-slate-500">Savings → Select member → Deposit → Enter amount → Choose payment method → Confirm.</div>
+            </div>
+
+            <div class="p-3 border rounded">
+              <div class="font-semibold">Withdraw</div>
+              <div class="text-xs text-slate-500">Savings → Select member → Withdraw → Enter amount (<=balance) → Confirm.</div>
+            </div>
+
+            <div class="p-3 border rounded">
+              <div class="font-semibold">Daily Minimum / Currency</div>
+              <div class="text-xs text-slate-500">Settings → Daily Rules → Change minimum and currency. Default is KES.</div>
+            </div>
+
+            <div class="p-3 border rounded col-span-2">
+              <div class="font-semibold">Navigation tips</div>
+              <div class="text-xs text-slate-500">Use the sidebar to switch pages. Dashboard shows quick KPIs and recent transactions. Settings affects system behavior.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings -->
+      <section id="page-settings" class="hidden">
+        <div class="card p-4">
+          <h2 class="text-lg font-semibold">Settings</h2>
+          <div class="text-xs text-slate-500 mb-3">Admin profile, targets, daily minimum, currency, payment methods</div>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="p-4 border rounded space-y-3">
+              <div class="font-semibold">Admin Profile</div>
+              <input id="settingAdminName" placeholder="Admin name" class="w-full p-2 border rounded" />
+              <input id="settingAdminEmail" placeholder="Admin email" class="w-full p-2 border rounded" />
+              <div class="flex justify-end">
+                <button id="saveAdminBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Save</button>
+              </div>
+            </div>
+
+            <div class="p-4 border rounded space-y-3">
+              <div class="font-semibold">Target & Est. Time</div>
+              <input id="settingTarget" type="number" placeholder="Target amount" class="w-full p-2 border rounded" />
+              <input id="settingEst" type="number" placeholder="Estimated days" class="w-full p-2 border rounded" />
+              <div class="flex justify-end">
+                <button id="saveTargetBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Save</button>
+              </div>
+            </div>
+
+            <div class="p-4 border rounded space-y-3">
+              <div class="font-semibold">Daily Rules</div>
+              <input id="settingDailyMin" type="number" placeholder="Daily minimum" class="w-full p-2 border rounded" />
+              <select id="settingCurrency" class="w-full p-2 border rounded">
+                <option value="KES">Shillings (KES)</option>
+                <option value="USD">US Dollar (USD)</option>
+                <option value="EUR">Euro (EUR)</option>
+                <option value="JPY">Yen (JPY)</option>
+              </select>
+              <div class="flex justify-end">
+                <button id="saveRulesBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Save</button>
+              </div>
+            </div>
+
+            <div class="p-4 border rounded space-y-3">
+              <div class="font-semibold">Admin Password</div>
+              <input id="settingPwd1" type="password" placeholder="New admin password" class="w-full p-2 border rounded" />
+              <input id="settingPwd2" type="password" placeholder="Confirm password" class="w-full p-2 border rounded" />
+              <div class="flex justify-end">
+                <button id="savePwdBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Change</button>
+              </div>
+            </div>
+
+            <div class="p-4 border rounded space-y-3 md:col-span-2">
+              <div class="font-semibold">Payment Methods (toggle)</div>
+              <div class="flex flex-wrap gap-2 mt-2">
+                <label class="inline-flex items-center gap-2 p-2 rounded border">
+                  <input type="checkbox" class="pm-check" value="bank" checked /> <span class="px-2 py-1 rounded pm-bank text-sm">Bank <i class="fa-solid fa-university ml-2"></i></span>
+                </label>
+                <label class="inline-flex items-center gap-2 p-2 rounded border">
+                  <input type="checkbox" class="pm-check" value="cash" checked /> <span class="px-2 py-1 rounded pm-cash text-sm">Cash <i class="fa-solid fa-money-bill-wave ml-2"></i></span>
+                </label>
+                <label class="inline-flex items-center gap-2 p-2 rounded border">
+                  <input type="checkbox" class="pm-check" value="card" checked /> <span class="px-2 py-1 rounded pm-card text-sm">Card <i class="fa-solid fa-credit-card ml-2"></i></span>
+                </label>
+                <label class="inline-flex items-center gap-2 p-2 rounded border">
+                  <input type="checkbox" class="pm-check" value="paypal" checked /> <span class="px-2 py-1 rounded pm-paypal text-sm">PayPal <i class="fa-brands fa-paypal ml-2"></i></span>
+                </label>
+                <label class="inline-flex items-center gap-2 p-2 rounded border">
+                  <input type="checkbox" class="pm-check" value="empesa" checked /> <span class="px-2 py-1 rounded pm-empesa text-sm">E-mpesa <i class="fa-solid fa-mobile-screen-button ml-2"></i></span>
+                </label>
+              </div>
+              <div class="flex justify-end">
+                <button id="savePaymentsBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Save</button>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+
+    </main>
+
+  <footer class="mt-6 text-xs text-slate-400"></footer>
+  </div>
+</div>
+
+<!-- Modals & Login -->
+<div id="modalRoot"></div>
+
+<!-- Login overlay removed (password barrier disabled) -->
+
+<!-- Minimal JS: app logic -->
+<script>
+/*
+  Trustvault single-file frontend app
+  - All state in localStorage under key STORE_KEY
+  - Admin password stored in localStorage (simple string) under PWD_KEY
+  - Charts use Chart.js
+  - Tailwind provides all styles
+*/
+
+/* -----------------------
+   Helpers & storage
+   ----------------------- */
+const STORE_KEY = 'trustvault_store_v1';
+const PWD_KEY = 'trustvault_admin_pwd_v1';
+
+const uid = ()=> Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+const todayYMD = ()=> { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); };
+const fmtCurrency = (n,cur)=> {
+  try {
+    // Map KES to "KES" (Intl doesn't support KES symbol universally),
+    if(cur === 'KES') return new Intl.NumberFormat('en-KE', { style:'currency', currency:'KES', maximumFractionDigits:0 }).format(n);
+    return new Intl.NumberFormat(undefined, { style:'currency', currency:cur, maximumFractionDigits:0 }).format(n);
+  } catch(e) { return cur + ' ' + n; }
+};
+
+function loadStore(){
+  const raw = localStorage.getItem(STORE_KEY);
+  if(raw) return JSON.parse(raw);
+  const seed = {
+    admin: { name: 'Admin', email: '' },
+    settings: {
+      target: 50000, estTime: 90, dailyMin: 100, currency: 'KES',
+      methods: ['bank','cash','card','paypal','empesa']
+    },
+    members: [],
+    transactions: [],    // {id, memberId, type:'deposit'|'withdraw', amount, date, method, note}
+    messages: [],        // {id,type,text,date,memberId,level}
+    todos: []            // {id, title, type:'note'|'event'|'minutes', date, body}
+  };
+  localStorage.setItem(STORE_KEY, JSON.stringify(seed));
+  return seed;
+}
+function saveStore(s){ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
+let store = loadStore();
+
+/* -----------------------
+   Admin password logic
+   - First run: no password in storage -> settable at first login overlay
+   - After set: must provide password to open app
+   ----------------------- */
+
+// Password feature removed — no first-run helper needed
+
+// Login removed: app runs without password barrier
+
+/* -----------------------
+   UI & Navigation
+   ----------------------- */
+const pageEls = {
+  dashboard: document.getElementById('page-dashboard'),
+  members: document.getElementById('page-members'),
+  savings: document.getElementById('page-savings'),
+  messages: document.getElementById('page-messages'),
+  statistics: document.getElementById('page-statistics'),
+  invoices: document.getElementById('page-invoices'),
+  todo: document.getElementById('page-todo'),
+  finances: document.getElementById('page-finances'),
+  help: document.getElementById('page-help'),
+  settings: document.getElementById('page-settings')
+};
+const sidebarBtns = document.querySelectorAll('.sidebar-btn');
+sidebarBtns.forEach(b=>{
+  b.addEventListener('click', ()=> {
+    sidebarBtns.forEach(x=> x.classList.remove('active'));
+    b.classList.add('active');
+    const p = b.getAttribute('data-page');
+    Object.keys(pageEls).forEach(k=> pageEls[k].classList.add('hidden'));
+    pageEls[p].classList.remove('hidden');
+    // small refreshes for pages that need it
+    if(p === 'dashboard') renderDashboard();
+    if(p === 'members') renderMembers();
+    if(p === 'savings') renderSavings();
+    if(p === 'messages') renderMessages();
+    if(p === 'statistics') renderStats();
+    if(p === 'invoices') renderInvoices();
+    if(p === 'todo') renderTodos();
+    if(p === 'finances') renderFinances();
+    if(p === 'settings') loadSettingsUI();
+  });
+});
+document.getElementById('logoutBtn').addEventListener('click', ()=> location.reload());
+
+// Mobile sidebar toggle (off-canvas drawer)
+const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+const sidebar = document.getElementById('sidebar');
+const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+const sidebarCloseBtn = document.getElementById('sidebarCloseBtn');
+function openSidebar(){
+  sidebar.classList.remove('-translate-x-full');
+  sidebar.setAttribute('aria-hidden', 'false');
+  sidebarBackdrop.classList.remove('hidden');
+  sidebarBackdrop.classList.add('block');
+  // focus the first focusable item in sidebar
+  const focusable = sidebar.querySelector('button, [href], input, select, textarea');
+  if(focusable) focusable.focus();
+}
+function closeSidebar(){
+  sidebar.classList.add('-translate-x-full');
+  sidebar.setAttribute('aria-hidden', 'true');
+  sidebarBackdrop.classList.add('hidden');
+  sidebarBackdrop.classList.remove('block');
+  // return focus to mobile menu button
+  if(mobileMenuBtn) mobileMenuBtn.focus();
+}
+
+// Focus trap implementation for the drawer
+let _sidebarKeyHandler = null;
+function getFocusable(container){
+  return Array.from(container.querySelectorAll('a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'))
+    .filter(el => el.offsetParent !== null);
+}
+function enableFocusTrap(){
+  _sidebarKeyHandler = function(e){
+    if(e.key === 'Escape') { closeSidebar(); }
+    if(e.key === 'Tab'){
+      const focusable = getFocusable(sidebar);
+      if(focusable.length === 0) { e.preventDefault(); return; }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if(e.shiftKey){ // backwards
+        if(document.activeElement === first){ e.preventDefault(); last.focus(); }
+      } else { // forwards
+        if(document.activeElement === last){ e.preventDefault(); first.focus(); }
+      }
+    }
+  };
+  document.addEventListener('keydown', _sidebarKeyHandler);
+}
+function disableFocusTrap(){ if(_sidebarKeyHandler){ document.removeEventListener('keydown', _sidebarKeyHandler); _sidebarKeyHandler = null; } }
+if(mobileMenuBtn){ mobileMenuBtn.addEventListener('click', ()=> { openSidebar(); }); }
+if(sidebarBackdrop){ sidebarBackdrop.addEventListener('click', ()=> closeSidebar()); }
+if(sidebarCloseBtn){ sidebarCloseBtn.addEventListener('click', ()=> closeSidebar()); }
+// close sidebar after navigation on mobile
+document.querySelectorAll('.sidebar-btn').forEach(b=> b.addEventListener('click', ()=> { if(window.innerWidth < 768) closeSidebar(); }));
+
+// Enhance open/close to manage focus trap
+const _origOpen = openSidebar; const _origClose = closeSidebar;
+openSidebar = function(){ _origOpen(); enableFocusTrap(); };
+closeSidebar = function(){ disableFocusTrap(); _origClose(); };
+
+/* -----------------------
+   Charts
+   ----------------------- */
+let donutChart = null;
+let lineChart = null;
+
+function buildDonut(){
+  const ctx = document.getElementById('donut').getContext('2d');
+  const totals = store.members.map(m=>{
+    const total = store.transactions.filter(t=> t.memberId===m.id).reduce((s,t)=> t.type==='deposit'? s+t.amount : s - t.amount, 0);
+    return { name: m.name || '—', total: Math.max(0, total) };
+  }).filter(x=> x.total > 0);
+  const labels = totals.map(x=> x.name);
+  const data = totals.map(x=> x.total);
+  const colors = labels.map((_,i)=> `hsl(${(i*52)%360} 75% 55%)`);
+  if(donutChart) donutChart.destroy();
+  donutChart = new Chart(ctx, {
+    type:'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors }]},
+    options: { plugins:{ legend:{ position:'right', labels:{ boxWidth:12 } } } }
+  });
+}
+
+function buildLine(){
+  const ctx = document.getElementById('line').getContext('2d');
+  // last 14 days
+  const days = [];
+  for(let i=13;i>=0;i--){
+    const d = new Date(); d.setDate(d.getDate()-i); d.setHours(0,0,0,0);
+    days.push(d.toISOString().slice(0,10));
+  }
+  const data = days.map(day => store.transactions.filter(t=> t.date.slice(0,10)===day).reduce((s,t)=> t.type==='deposit'? s+t.amount : s - t.amount, 0));
+  if(lineChart) lineChart.destroy();
+  lineChart = new Chart(ctx, {
+    type:'line',
+    data: { labels: days.map(d=> new Date(d).toLocaleDateString()), datasets: [{ label:'Daily savings', data, fill:true, tension:0.3 }]},
+    options: { scales:{ y:{ beginAtZero:true } } }
+  });
+}
+
+/* -----------------------
+   Rendering functions
+   ----------------------- */
+function refreshAll(){
+  saveStore(store);
+  document.getElementById('adminNameShort').textContent = store.admin.name || 'Admin';
+  document.getElementById('currencyShort').textContent = store.settings.currency || 'KES';
+  renderDashboard();
+  renderMembers();
+  renderSavings();
+  renderMessages();
+  renderStats();
+  renderInvoices();
+  renderTodos();
+  renderFinances();
+}
+
+// Dashboard
+function renderDashboard(){
+  // KPIs
+  const totalSaved = store.transactions.reduce((s,t)=> t.type==='deposit'? s+t.amount: s - t.amount, 0);
+  document.getElementById('kpiMembers').textContent = store.members.length;
+  document.getElementById('kpiSavings').textContent = fmtCurrency(totalSaved, store.settings.currency);
+  document.getElementById('kpiRecent').textContent = (store.members.slice(-1)[0] || {}).name || '—';
+  document.getElementById('kpiTarget').textContent = fmtCurrency(store.settings.target || 0, store.settings.currency);
+  document.getElementById('kpiTargetSub').textContent = (store.settings.estTime||0) + ' days est.';
+
+  // charts smaller intentionally to make recent transactions visible
+  buildDonut();
+  buildLine();
+
+  // recent transactions
+  const tbody = document.getElementById('recentTbody'); tbody.innerHTML = '';
+  const recent = store.transactions.slice().reverse().slice(0,8);
+  recent.forEach((t,i)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="text-xs text-slate-500">${i+1}</td>
+                    <td>${(store.members.find(m=>m.id===t.memberId)||{}).name || '—'}</td>
+                    <td>${t.type}</td>
+                    <td>${fmtCurrency(t.amount, store.settings.currency)}</td>
+                    <td class="text-xs text-slate-400">${new Date(t.date).toLocaleString()}</td>
+                    <td>${t.method || ''}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// Members
+function renderMembers(){
+  const tbody = document.getElementById('membersTbody'); tbody.innerHTML = '';
+  store.members.forEach((m, idx)=>{
+    const saved = store.transactions.filter(t=> t.memberId===m.id).reduce((s,t)=> t.type==='deposit'? s+t.amount : s - t.amount, 0);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="text-xs text-slate-500">${idx+1}</td>
+                    <td>${m.name}</td>
+                    <td>${m.phone||'—'}</td>
+                    <td class="text-xs text-slate-400">${new Date(m.joined).toLocaleDateString()}</td>
+                    <td>${fmtCurrency(saved, store.settings.currency)}</td>
+                    <td>
+                      <button class="editMemberBtn text-xs text-sky-600 px-2" data-id="${m.id}">Edit</button>
+                      <button class="delMemberBtn text-xs text-rose-600 px-2" data-id="${m.id}">Delete</button>
+                    </td>`;
+    tbody.appendChild(tr);
+  });
+
+  // attach actions
+  document.querySelectorAll('.editMemberBtn').forEach(b=> b.addEventListener('click', e=>{
+    const id = e.target.dataset.id; openEditMemberModal(id);
+  }));
+  document.querySelectorAll('.delMemberBtn').forEach(b=> b.addEventListener('click', e=>{
+    const id = e.target.dataset.id;
+    if(!confirm('Delete member and their transactions?')) return;
+    store.members = store.members.filter(x=> x.id !== id);
+    store.transactions = store.transactions.filter(t=> t.memberId !== id);
+    store.messages.push({ id: uid(), type:'Member deleted', text:`Member deleted`, date:new Date().toISOString(), level:'danger' });
+    refreshAll();
+  }));
+}
+
+// Savings page
+function renderSavings(){
+  const sel = document.getElementById('memberSelect'); sel.innerHTML = '<option value="">-- Select member --</option>';
+  store.members.forEach(m=> {
+    const o = document.createElement('option'); o.value = m.id; o.textContent = m.name; sel.appendChild(o);
+  });
+
+  // transactions table
+  const tbody = document.getElementById('transactionsTbody'); tbody.innerHTML = '';
+  store.transactions.slice().reverse().forEach((t, idx)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="text-xs text-slate-500">${idx+1}</td>
+                    <td>${(store.members.find(m=>m.id===t.memberId)||{}).name || '—'}</td>
+                    <td>${t.type}</td>
+                    <td>${fmtCurrency(t.amount, store.settings.currency)}</td>
+                    <td class="text-xs text-slate-400">${new Date(t.date).toLocaleString()}</td>
+                    <td>${t.method || ''}</td>
+                    <td><button class="delTxBtn text-xs text-rose-600" data-id="${t.id}">Delete</button></td>`;
+    tbody.appendChild(tr);
+  });
+
+  document.querySelectorAll('.delTxBtn').forEach(b=> b.addEventListener('click', e=>{
+    const id = e.target.dataset.id;
+    if(!confirm('Delete transaction?')) return;
+    store.transactions = store.transactions.filter(tx => tx.id !== id);
+    store.messages.push({ id: uid(), type:'Transaction deleted', text:'A transaction was deleted', date:new Date().toISOString(), level:'info' });
+    refreshAll();
+  }));
+
+  // selected member balance
+  document.getElementById('memberSelect').addEventListener('change', ()=>{
+    const id = document.getElementById('memberSelect').value;
+    if(!id) { document.getElementById('selectedBalance').textContent = fmtCurrency(0, store.settings.currency); return; }
+    const bal = store.transactions.filter(t=> t.memberId===id).reduce((s,t)=> t.type==='deposit'? s+t.amount : s - t.amount, 0);
+    document.getElementById('selectedBalance').textContent = fmtCurrency(bal, store.settings.currency);
+  });
+}
+
+// Messages
+function renderMessages(){
+  const wrap = document.getElementById('messagesList'); wrap.innerHTML = '';
+  const msgs = store.messages.slice().reverse();
+  msgs.forEach(m=>{
+    const el = document.createElement('div');
+    el.className = 'p-3 border rounded flex items-start gap-3';
+    const levelColor = m.level === 'danger' ? 'text-rose-600' : 'text-slate-600';
+    el.innerHTML = `<div class="${levelColor}"><i class="fa-solid fa-circle-exclamation"></i></div>
+                    <div class="flex-1"><div class="font-semibold">${m.type}</div><div class="text-xs text-slate-500">${m.text}</div></div>
+                    <div class="text-xs text-slate-400">${new Date(m.date).toLocaleString()}</div>`;
+    wrap.appendChild(el);
+  });
+  // show red dot if any danger messages
+  const hasDanger = store.messages.some(m=> m.level==='danger');
+  document.getElementById('msgDot').classList.toggle('hidden', !hasDanger);
+}
+
+// Stats
+function renderStats(){
+  const wrap = document.getElementById('statsList'); wrap.innerHTML = '';
+  const totals = store.members.map(m=> {
+    const t = store.transactions.filter(tx => tx.memberId===m.id).reduce((s,tx)=> tx.type==='deposit'? s+tx.amount : s - tx.amount, 0);
+    return { name: m.name || '—', total: Math.max(0,t) };
+  });
+  const totalAll = totals.reduce((s,x)=> s+x.total, 0) || 1;
+  totals.forEach(t=>{
+    const pct = Math.round((t.total / totalAll) * 100);
+    const el = document.createElement('div'); el.className = 'p-3 border rounded';
+    el.innerHTML = `<div class="flex justify-between"><div class="font-semibold">${t.name}</div><div class="text-xs text-slate-500">${fmtCurrency(t.total, store.settings.currency)}</div></div><div class="text-xs text-slate-400">${pct}% of total</div>`;
+    wrap.appendChild(el);
+  });
+}
+
+// Invoices
+function renderInvoices(){
+  const tbody = document.getElementById('invoicesTbody'); tbody.innerHTML = '';
+  const today = todayYMD();
+  store.members.forEach((m,idx)=>{
+    const savedToday = store.transactions.filter(t=> t.memberId===m.id && t.type==='deposit' && t.date.slice(0,10)===today).reduce((s,t)=> s+t.amount, 0);
+    const status = savedToday === 0 ? 'Pending' : (savedToday < store.settings.dailyMin ? 'Underpaid' : 'Paid');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="text-xs text-slate-500">${idx+1}</td>
+                    <td>${m.name}</td>
+                    <td class="text-xs text-slate-400">${new Date(today).toLocaleDateString()}</td>
+                    <td>${fmtCurrency(store.settings.dailyMin || 0, store.settings.currency)}</td>
+                    <td>${status}</td>
+                    <td><button class="remindBtn text-xs text-sky-600" data-id="${m.id}">Remind</button></td>`;
+    tbody.appendChild(tr);
+  });
+
+  document.querySelectorAll('.remindBtn').forEach(b=> b.addEventListener('click', e=>{
+    const id = e.target.dataset.id; const member = store.members.find(m=> m.id===id);
+    store.messages.push({ id: uid(), type:'Reminder', text: `${member.name} was reminded to deposit today.`, date: new Date().toISOString(), memberId: id, level: 'info' });
+    refreshAll();
+  }));
+}
+
+// To-do
+function renderTodos(){
+  const wrap = document.getElementById('todoList'); wrap.innerHTML = '';
+  store.todos.slice().reverse().forEach(t=>{
+    const el = document.createElement('div');
+    el.className = 'p-3 border rounded flex justify-between items-start';
+    el.innerHTML = `<div><div class="font-semibold">${t.title} <span class="text-xs text-slate-500">(${t.type})</span></div><div class="text-xs text-slate-400">${t.body}</div></div>
+                    <div class="text-xs"><div class="mb-2 text-slate-400">${t.date ? new Date(t.date).toLocaleString() : ''}</div><button class="delTodo text-xs text-rose-600" data-id="${t.id}">Delete</button></div>`;
+    wrap.appendChild(el);
+  });
+
+  document.querySelectorAll('.delTodo').forEach(b=> b.addEventListener('click', e=>{
+    const id = e.target.dataset.id; if(!confirm('Delete note?')) return;
+    store.todos = store.todos.filter(x=> x.id !== id); refreshAll();
+  }));
+}
+
+// Finances
+function renderFinances(){
+  const totalSaved = store.transactions.reduce((s,t)=> t.type==='deposit'? s+t.amount : s - t.amount, 0);
+  const savedToday = store.transactions.filter(t=> t.type==='deposit' && t.date.slice(0,10)===todayYMD()).reduce((s,t)=> s+t.amount, 0);
+  document.getElementById('finTarget').textContent = fmtCurrency(store.settings.target || 0, store.settings.currency);
+  document.getElementById('finAchieved').textContent = fmtCurrency(totalSaved, store.settings.currency);
+  document.getElementById('finToday').textContent = fmtCurrency(savedToday, store.settings.currency);
+}
+
+/* -----------------------
+   Actions: Add member / Edit / Deposit / Withdraw
+   ----------------------- */
+
+// Add member:
+document.getElementById('addMemberBtn').addEventListener('click', ()=>{
+  openModal('Add member', `<div class="space-y-2">
+    <input id="mName" placeholder="Full name" class="w-full p-2 border rounded" />
+    <input id="mPhone" placeholder="Phone (optional)" class="w-full p-2 border rounded" />
+  </div>`, ()=>{
+    const name = document.getElementById('mName').value.trim();
+    const phone = document.getElementById('mPhone').value.trim();
+    if(!name) return alert('Name required.');
+    const m = { id: uid(), name, phone, joined: new Date().toISOString() };
+    store.members.push(m);
+    store.messages.push({ id: uid(), type:'Member added', text: `${name} was added.`, date: new Date().toISOString(), memberId: m.id, level: 'info' });
+    refreshAll();
+  }, 'Add');
+
+// Edit member:
+});
+function openEditMemberModal(id){
+  const m = store.members.find(x=> x.id===id);
+  if(!m) return alert('Member not found');
+  openModal('Edit member', `<div class="space-y-2">
+    <input id="mNameE" value="${m.name}" placeholder="Full name" class="w-full p-2 border rounded" />
+    <input id="mPhoneE" value="${m.phone||''}" placeholder="Phone" class="w-full p-2 border rounded" />
+  </div>`, ()=>{
+    const name = document.getElementById('mNameE').value.trim();
+    const phone = document.getElementById('mPhoneE').value.trim();
+    if(!name) return alert('Name required.');
+    m.name = name; m.phone = phone;
+    store.messages.push({ id: uid(), type:'Member edited', text: `${m.name} updated.`, date: new Date().toISOString(), memberId: m.id, level:'info' });
+    refreshAll();
+  }, 'Save');
+}
+
+// Deposit flow:
+document.getElementById('depositBtn').addEventListener('click', ()=> {
+  const memberId = document.getElementById('memberSelect').value;
+  if(!memberId) return alert('Select a member first.');
+  // build payment method radio buttons from settings
+  const methods = store.settings.methods || [];
+  if(!methods.length) return alert('No payment methods enabled in Settings.');
+  const methodsHtml = methods.map((m,i)=>{
+    const label = m==='bank' ? 'Bank transfer' : m==='cash' ? 'Cash' : m==='card' ? 'Debit/Credit Card' : m==='paypal' ? 'PayPal' : 'E-mpesa';
+    const cls = m==='bank'? 'pm-bank' : m==='cash' ? 'pm-cash' : m==='card' ? 'pm-card' : m==='paypal' ? 'pm-paypal' : 'pm-empesa';
+    return `<label class="inline-flex items-center gap-2"><input type="radio" name="depMethod" value="${m}" ${i===0?'checked':''} /><span class="px-2 py-1 rounded ${cls} text-xs">${label}</span></label>`;
+  }).join(' ');
+  openModal('Deposit', `<div class="space-y-2">
+    <input id="depAmount" type="number" placeholder="Amount" class="w-full p-2 border rounded" />
+    <div class="text-xs text-slate-500">Method</div><div class="flex gap-2">${methodsHtml}</div>
+    <textarea id="depNote" placeholder="Note (optional)" class="w-full p-2 border rounded"></textarea>
+  </div>`, ()=>{
+    const amount = Number(document.getElementById('depAmount').value) || 0;
+    if(amount <= 0) return alert('Enter a valid amount.');
+    const method = (document.querySelector('input[name="depMethod"]:checked') || {}).value || methods[0];
+    const note = document.getElementById('depNote').value.trim();
+    const tx = { id: uid(), memberId, type:'deposit', amount, date: new Date().toISOString(), method, note };
+    store.transactions.push(tx);
+    const member = store.members.find(m=> m.id===memberId);
+    // messages and danger for below-daily-min
+    const savedToday = store.transactions.filter(t=> t.memberId===memberId && t.type==='deposit' && t.date.slice(0,10)===todayYMD()).reduce((s,t)=> s+t.amount, 0);
+    const level = savedToday < store.settings.dailyMin ? 'danger' : 'info';
+    store.messages.push({ id: uid(), type:'Deposit', text: `${member.name} deposited ${fmtCurrency(amount, store.settings.currency)} via ${method}${note ? ' — '+note : ''}`, date: new Date().toISOString(), memberId, level });
+    if(savedToday < store.settings.dailyMin) {
+      store.messages.push({ id: uid(), type:'Below minimum', text: `${member.name} has not reached daily minimum (${fmtCurrency(store.settings.dailyMin, store.settings.currency)})`, date: new Date().toISOString(), memberId, level: 'danger' });
+    }
+    refreshAll();
+  }, 'Confirm');
+});
+
+// Withdraw flow:
+document.getElementById('withdrawBtn').addEventListener('click', ()=> {
+  const memberId = document.getElementById('memberSelect').value;
+  if(!memberId) return alert('Select a member first.');
+  openModal('Withdraw', `<div class="space-y-2">
+    <input id="withAmount" type="number" placeholder="Amount" class="w-full p-2 border rounded" />
+    <textarea id="withNote" placeholder="Note (optional)" class="w-full p-2 border rounded"></textarea>
+  </div>`, ()=>{
+    const amount = Number(document.getElementById('withAmount').value) || 0;
+    if(amount <= 0) return alert('Enter a valid amount.');
+    const balance = store.transactions.filter(t=> t.memberId===memberId).reduce((s,t)=> t.type==='deposit'? s+t.amount : s - t.amount, 0);
+    if(amount > balance) return alert('Insufficient funds.');
+    const note = document.getElementById('withNote').value.trim();
+    store.transactions.push({ id: uid(), memberId, type:'withdraw', amount, date: new Date().toISOString(), method: 'withdraw', note });
+    const member = store.members.find(m=> m.id===memberId);
+    store.messages.push({ id: uid(), type:'Withdraw', text: `${member.name} withdrew ${fmtCurrency(amount, store.settings.currency)}${note? ' — ' + note : ''}`, date: new Date().toISOString(), memberId, level:'info' });
+    refreshAll();
+  }, 'Confirm');
+});
+
+/* -----------------------
+   Settings: save actions
+   ----------------------- */
+function loadSettingsUI(){
+  document.getElementById('settingAdminName').value = store.admin.name || '';
+  document.getElementById('settingAdminEmail').value = store.admin.email || '';
+  document.getElementById('settingTarget').value = store.settings.target || 0;
+  document.getElementById('settingEst').value = store.settings.estTime || 0;
+  document.getElementById('settingDailyMin').value = store.settings.dailyMin || 0;
+  document.getElementById('settingCurrency').value = store.settings.currency || 'KES';
+  document.querySelectorAll('.pm-check').forEach(cb => cb.checked = (store.settings.methods || []).includes(cb.value));
+}
+
+document.getElementById('saveAdminBtn').addEventListener('click', ()=>{
+  const n = document.getElementById('settingAdminName').value.trim();
+  const e = document.getElementById('settingAdminEmail').value.trim();
+  if(!n) return alert('Admin name required');
+  store.admin.name = n; store.admin.email = e;
+  store.messages.push({ id: uid(), type:'Settings', text: 'Admin profile updated.', date: new Date().toISOString(), level: 'info' });
+  refreshAll();
+});
+document.getElementById('saveTargetBtn').addEventListener('click', ()=>{
+  store.settings.target = Number(document.getElementById('settingTarget').value) || 0;
+  store.settings.estTime = Number(document.getElementById('settingEst').value) || 0;
+  store.messages.push({ id: uid(), type:'Settings', text: 'Target updated.', date: new Date().toISOString(), level: 'info' });
+  refreshAll();
+});
+document.getElementById('saveRulesBtn').addEventListener('click', ()=>{
+  store.settings.dailyMin = Number(document.getElementById('settingDailyMin').value) || 0;
+  store.settings.currency = document.getElementById('settingCurrency').value;
+  store.messages.push({ id: uid(), type:'Settings', text: 'Daily rules updated.', date: new Date().toISOString(), level: 'info' });
+  refreshAll();
+});
+document.getElementById('savePaymentsBtn').addEventListener('click', ()=>{
+  const checked = Array.from(document.querySelectorAll('.pm-check')).filter(cb=> cb.checked).map(cb=> cb.value);
+  store.settings.methods = checked;
+  store.messages.push({ id: uid(), type:'Settings', text: 'Payment methods updated.', date: new Date().toISOString(), level: 'info' });
+  refreshAll();
+});
+document.getElementById('savePwdBtn').addEventListener('click', ()=>{
+  // Password management removed in this build — clear inputs and show a message.
+  document.getElementById('settingPwd1').value = ''; document.getElementById('settingPwd2').value = '';
+  alert('Password feature is disabled in this build.');
+});
+
+/* -----------------------
+   To Do add
+   ----------------------- */
+document.getElementById('addTodoBtn').addEventListener('click', ()=> {
+  openModal('Add note / event / minutes', `<div class="space-y-2">
+    <input id="todoTitle" placeholder="Title" class="w-full p-2 border rounded" />
+    <select id="todoType" class="w-full p-2 border rounded"><option value="note">Note</option><option value="event">Event</option><option value="minutes">Minutes</option></select>
+    <input id="todoDate" type="datetime-local" class="w-full p-2 border rounded" />
+    <textarea id="todoBody" placeholder="Details" class="w-full p-2 border rounded"></textarea>
+  </div>`, ()=>{
+    const title = document.getElementById('todoTitle').value.trim();
+    if(!title) return alert('Title required.');
+    const type = document.getElementById('todoType').value;
+    const date = document.getElementById('todoDate').value || new Date().toISOString();
+    const body = document.getElementById('todoBody').value.trim();
+    store.todos.push({ id: uid(), title, type, date, body });
+    store.messages.push({ id: uid(), type:'Note', text: `New ${type}: ${title}`, date: new Date().toISOString(), level:'info' });
+    refreshAll();
+  }, 'Add');
+});
+
+/* -----------------------
+   Modal helper
+   ----------------------- */
+function openModal(title, htmlContent, onOk, okText='OK'){
+  const root = document.getElementById('modalRoot');
+  root.innerHTML = `<div class="fixed inset-0 flex items-center justify-center modal-backdrop" style="z-index:70">
+    <div class="bg-white rounded p-6 w-96 shadow">
+      <h3 class="text-lg font-semibold mb-3">${title}</h3>
+      <div id="modalBody">${htmlContent}</div>
+      <div class="flex justify-end gap-2 mt-4">
+        <button id="modalCancel" class="px-3 py-1 rounded border">Cancel</button>
+        <button id="modalOk" class="px-3 py-1 rounded bg-sky-600 text-white">${okText}</button>
+      </div>
+    </div>
+  </div>`;
+  document.getElementById('modalCancel').addEventListener('click', ()=> root.innerHTML = '');
+  document.getElementById('modalOk').addEventListener('click', ()=>{
+    try { onOk(); } catch(e){ console.error(e); alert('Error: '+e.message); }
+    root.innerHTML = '';
+  });
+}
+
+/* -----------------------
+   Other small actions
+   ----------------------- */
+document.getElementById('clearMessages').addEventListener('click', ()=> {
+  if(!confirm('Clear all messages?')) return;
+  store.messages = []; refreshAll();
+});
+document.getElementById('filterMsgs').addEventListener('click', ()=> alert('Filter placeholder: future filter UI can be added.'));
+
+/* -----------------------
+   Initial render & daily rollover
+   ----------------------- */
+refreshAll();
+
+// periodic check for day rollover — if day changes, create a rollover message and refresh
+let lastDay = todayYMD();
+setInterval(()=>{
+  const now = todayYMD();
+  if(now !== lastDay){
+    lastDay = now;
+    store.messages.push({ id: uid(), type:'Day rollover', text: `New day ${now}`, date: new Date().toISOString(), level:'info' });
+    saveStore(store);
+    refreshAll();
+  }
+}, 60_000);
+
+/* -----------------------
+   Expose some helpers for debugging in console
+   ----------------------- */
+window._trustvault = {
+  store, save: ()=> { saveStore(store); refreshAll(); }, reset: ()=> { if(confirm('Reset all data?')) { localStorage.removeItem(STORE_KEY); localStorage.removeItem(PWD_KEY); location.reload(); } }
+};
+</script>
+
+</body>
+</html>
