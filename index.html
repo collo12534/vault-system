@@ -11,27 +11,32 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.3.0/chart.umd.min.js"></script>
   <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
-
-  <style>
-    /* Small visual tuning beyond default Tailwind */
-    body { background: #f4f7fb; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
-    .card { background: white; box-shadow: 0 6px 18px rgba(12, 20, 35, 0.06); border-radius: 0.75rem; }
-    /* payment badge colors */
-    .pm-bank { background:#e6f0ff;color:#1e3a8a }       /* blue */
-    .pm-cash { background:#ecfdf5;color:#065f46 }       /* green */
-    .pm-card { background:#f5f3ff;color:#6d28d9 }       /* purple */
-    .pm-paypal { background:#eef2ff;color:#0f172a }     /* dark-blue look */
-    .pm-empesa { background:#ecfdf5;color:#047857 }     /* mpesa-green */
-    /* modal backdrop fix */
-    .modal-backdrop { background: rgba(2,6,23,0.45); }
-    /* small table fix */
-    table th, table td { padding: .5rem .75rem; }
-  </style>
+  <!-- Project styles (split out to styles.css) -->
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body class="min-h-screen">
 
 <!-- App container -->
 <div id="app" class="flex min-h-screen">
+
+  <!-- Authentication overlay (requires password before using the app) -->
+  <div id="authOverlay" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded p-6 w-96 shadow">
+      <h3 id="authTitle" class="text-lg font-semibold mb-3">Enter password</h3>
+      <div id="authSetFields" class="space-y-2 hidden">
+        <input id="authPwd1" type="password" placeholder="Password" class="w-full p-2 border rounded" />
+        <input id="authPwd2" type="password" placeholder="Confirm password" class="w-full p-2 border rounded" />
+      </div>
+      <div id="authEnterFields" class="space-y-2 hidden">
+        <input id="authPwd" type="password" placeholder="Password" class="w-full p-2 border rounded" />
+      </div>
+      <div class="flex justify-end gap-2 mt-4">
+        <button id="authCancel" class="px-3 py-1 rounded border hidden">Cancel</button>
+        <button id="authSubmit" class="px-3 py-1 rounded bg-sky-600 text-white">Enter</button>
+      </div>
+      <div id="authMsg" class="text-sm text-rose-600 mt-2 hidden"></div>
+    </div>
+  </div>
 
   <!-- Sidebar (off-canvas on small screens) -->
   <aside id="sidebar" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="sidebarTitle" class="w-64 p-6 bg-slate-900 text-white flex flex-col fixed left-0 top-0 h-full transform -translate-x-full md:translate-x-0 md:relative md:top-auto md:left-auto md:h-auto md:flex transition-transform duration-200 ease-in-out z-50">
@@ -207,19 +212,38 @@
         </div>
       </section>
 
-      <!-- Members -->
+      <!-- Members (new layout: search + highlighted rows with expandable details) -->
       <section id="page-members" class="hidden">
         <div class="card p-4">
           <div class="flex items-center justify-between mb-4">
-            <div><h2 class="text-lg font-semibold">Members</h2><div class="text-xs text-slate-500">Add, edit or remove members</div></div>
-            <div><button id="addMemberBtn" class="bg-sky-600 text-white px-3 py-1 rounded"><i class="fa-solid fa-plus mr-2"></i>Add member</button></div>
+            <div>
+              <h2 class="text-lg font-semibold">Members</h2>
+              <div class="text-xs text-slate-500">Overview and quick actions for members</div>
+            </div>
+            <div class="flex items-center gap-3">
+              <input id="memberSearch" placeholder="Search members..." class="p-2 border rounded text-sm" />
+              <button id="addMemberBtn" class="bg-sky-600 text-white px-3 py-1 rounded"><i class="fa-solid fa-plus mr-2"></i>Add member</button>
+            </div>
           </div>
 
-          <div class="overflow-x-auto">
-            <table class="w-full text-left">
-              <thead class="text-xs text-slate-500"><tr><th>#</th><th>Name</th><th>Phone</th><th>Joined</th><th>Saved</th><th>Actions</th></tr></thead>
-              <tbody id="membersTbody" class="text-sm"></tbody>
-            </table>
+          <div class="overflow-hidden rounded">
+            <div class="w-full overflow-x-auto">
+              <table class="w-full text-left">
+                <thead class="text-xs text-slate-500 bg-gradient-to-r from-violet-600 to-purple-500 text-white">
+                  <tr>
+                    <th class="p-3"><input id="selectAllMembers" type="checkbox" /></th>
+                    <th class="p-3">Member</th>
+                    <th class="p-3">Status</th>
+                    <th class="p-3">Joined</th>
+                    <th class="p-3">Phone / Address</th>
+                    <th class="p-3">Saved</th>
+                    <th class="p-3">Method</th>
+                    <th class="p-3">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="membersTbody" class="text-sm bg-white"></tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
@@ -279,14 +303,69 @@
 
       <!-- Invoices -->
       <section id="page-invoices" class="hidden">
-        <div class="card p-4">
-          <h2 class="text-lg font-semibold">Invoices / Pending</h2>
-          <div class="text-xs text-slate-500 mb-3">Daily expected deposits status</div>
-          <div class="overflow-x-auto">
-            <table class="w-full text-left">
-              <thead class="text-xs text-slate-500"><tr><th>#</th><th>Member</th><th>Date</th><th>Expected</th><th>Status</th><th>Action</th></tr></thead>
-              <tbody id="invoicesTbody" class="text-sm"></tbody>
-            </table>
+        <div class="space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-semibold">Invoices</h2>
+              <div class="text-xs text-slate-500">Daily expected deposits status</div>
+            </div>
+            <div class="flex items-center gap-3">
+              <button id="createInvoiceBtn" class="px-4 py-2 bg-orange-500 text-white rounded text-sm">Create Invoice</button>
+            </div>
+          </div>
+
+          <!-- summary cards -->
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="card p-4">
+              <div class="text-sm font-semibold">Paid</div>
+              <div class="text-xs text-slate-400">Pies: <span id="paidCount">0</span></div>
+              <div id="paidValue" class="text-lg font-bold mt-2">KES 0</div>
+            </div>
+            <div class="card p-4">
+              <div class="text-sm font-semibold">Unpaid</div>
+              <div class="text-xs text-slate-400">Pies: <span id="unpaidCount">0</span></div>
+              <div id="unpaidValue" class="text-lg font-bold mt-2">KES 0</div>
+            </div>
+            <div class="card p-4">
+              <div class="text-sm font-semibold">Overdue</div>
+              <div class="text-xs text-slate-400">Pies: <span id="overdueCount">0</span></div>
+              <div id="overdueValue" class="text-lg font-bold mt-2">KES 0</div>
+            </div>
+            <div class="card p-4">
+              <div class="text-sm font-semibold">Draft</div>
+              <div class="text-xs text-slate-400">Pies: <span id="draftCount">0</span></div>
+              <div id="draftValue" class="text-lg font-bold mt-2">KES 0</div>
+            </div>
+          </div>
+
+          <!-- tabs & table -->
+          <div class="card p-4">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <button class="invoices-tab px-3 py-1 rounded bg-slate-100 text-sm" data-filter="all">All</button>
+                <button class="invoices-tab px-3 py-1 rounded text-sm" data-filter="paid">Paid</button>
+                <button class="invoices-tab px-3 py-1 rounded text-sm" data-filter="unpaid">Unpaid</button>
+                <button class="invoices-tab px-3 py-1 rounded text-sm" data-filter="overdue">Overdue</button>
+                <button class="invoices-tab px-3 py-1 rounded text-sm" data-filter="draft">Draft</button>
+              </div>
+              <div class="text-xs text-slate-400">Showing invoices</div>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left">
+                <thead class="text-xs text-slate-500"><tr><th>#</th><th>Client</th><th>Create</th><th>Due</th><th>Amount</th><th>Send</th><th>Status</th></tr></thead>
+                <tbody id="invoicesTbody" class="text-sm"></tbody>
+              </table>
+            </div>
+
+            <div class="mt-4 flex items-center justify-between">
+              <div class="text-xs text-slate-500">Showing <span id="invoicesCount">0</span> invoices</div>
+              <div class="flex items-center gap-2 text-sm">
+                <button id="invPrev" class="px-2 py-1 border rounded">Previous</button>
+                <div id="invPage" class="px-3">1</div>
+                <button id="invNext" class="px-2 py-1 border rounded">Next</button>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -365,71 +444,136 @@
           <h2 class="text-lg font-semibold">Settings</h2>
           <div class="text-xs text-slate-500 mb-3">Admin profile, targets, daily minimum, currency, payment methods</div>
 
-          <div class="grid md:grid-cols-2 gap-4">
-            <div class="p-4 border rounded space-y-3">
-              <div class="font-semibold">Admin Profile</div>
-              <input id="settingAdminName" placeholder="Admin name" class="w-full p-2 border rounded" />
-              <input id="settingAdminEmail" placeholder="Admin email" class="w-full p-2 border rounded" />
-              <div class="flex justify-end">
-                <button id="saveAdminBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Save</button>
+          <div class="grid md:grid-cols-12 gap-4">
+            <!-- Left: avatar / quick info -->
+            <aside class="md:col-span-3">
+              <div class="card p-4 text-center">
+                <div class="mx-auto w-28 h-28 mb-3 rounded-full overflow-hidden border-2 border-white shadow" id="profilePreview"><img src="jlc.jpg" alt="avatar" class="w-full h-full object-cover" /></div>
+                <div class="font-semibold text-lg" id="profileNamePreview">Admin</div>
+                <div class="text-xs text-slate-500 mb-3" id="profileEmailPreview">admin@example.com</div>
+                <div class="space-y-2">
+                  <label class="block text-xs text-slate-500">Change picture</label>
+                  <input id="settingAvatarFile" type="file" accept="image/*" class="w-full text-xs" />
+                </div>
               </div>
-            </div>
+            </aside>
 
-            <div class="p-4 border rounded space-y-3">
-              <div class="font-semibold">Target & Est. Time</div>
-              <input id="settingTarget" type="number" placeholder="Target amount" class="w-full p-2 border rounded" />
-              <input id="settingEst" type="number" placeholder="Estimated days" class="w-full p-2 border rounded" />
-              <div class="flex justify-end">
-                <button id="saveTargetBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Save</button>
-              </div>
-            </div>
+            <!-- Center: main settings cards -->
+            <main class="md:col-span-6 space-y-4">
+              <div class="card p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <div>
+                    <div class="font-semibold">General information</div>
+                    <div class="text-xs text-slate-500">Update admin name and contact</div>
+                  </div>
+                  <div class="text-xs text-slate-400">Editable</div>
+                </div>
+                      <div class="grid grid-cols-1 gap-3">
+                        <input id="settingAdminName" placeholder="Admin name" class="w-full p-2 border rounded" />
+                        <input id="settingAdminEmail" placeholder="Admin email" class="w-full p-2 border rounded" />
 
-            <div class="p-4 border rounded space-y-3">
-              <div class="font-semibold">Daily Rules</div>
-              <input id="settingDailyMin" type="number" placeholder="Daily minimum" class="w-full p-2 border rounded" />
-              <select id="settingCurrency" class="w-full p-2 border rounded">
-                <option value="KES">Shillings (KES)</option>
-                <option value="USD">US Dollar (USD)</option>
-                <option value="EUR">Euro (EUR)</option>
-                <option value="JPY">Yen (JPY)</option>
-              </select>
-              <div class="flex justify-end">
-                <button id="saveRulesBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Save</button>
-              </div>
-            </div>
+                        <!-- Moved: Admin password & logout (was on right column) -->
+                        <div class="mt-3 p-3 border rounded">
+                          <div class="font-semibold text-sm mb-2">Admin password</div>
+                          <input id="settingPwd1" type="password" placeholder="New admin password" class="w-full p-2 border rounded mb-2" />
+                          <input id="settingPwd2" type="password" placeholder="Confirm password" class="w-full p-2 border rounded" />
+                          <div class="flex justify-between items-center mt-3">
+                            <div class="text-xs text-slate-500">Change your admin password</div>
+                            <div class="flex items-center gap-2">
+                              <button id="savePwdBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Change</button>
+                              <button id="logoutBtnSettings" class="px-3 py-1 border rounded">Log out</button>
+                            </div>
+                          </div>
+                        </div>
 
-            <div class="p-4 border rounded space-y-3">
-              <div class="font-semibold">Admin Password</div>
-              <input id="settingPwd1" type="password" placeholder="New admin password" class="w-full p-2 border rounded" />
-              <input id="settingPwd2" type="password" placeholder="Confirm password" class="w-full p-2 border rounded" />
-              <div class="flex justify-end">
-                <button id="savePwdBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Change</button>
+                        <div class="flex justify-end">
+                          <button id="saveAdminBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Save profile</button>
+                        </div>
+                      </div>
               </div>
-            </div>
 
-            <div class="p-4 border rounded space-y-3 md:col-span-2">
-              <div class="font-semibold">Payment Methods (toggle)</div>
-              <div class="flex flex-wrap gap-2 mt-2">
-                <label class="inline-flex items-center gap-2 p-2 rounded border">
-                  <input type="checkbox" class="pm-check" value="bank" checked /> <span class="px-2 py-1 rounded pm-bank text-sm">Bank <i class="fa-solid fa-university ml-2"></i></span>
-                </label>
-                <label class="inline-flex items-center gap-2 p-2 rounded border">
-                  <input type="checkbox" class="pm-check" value="cash" checked /> <span class="px-2 py-1 rounded pm-cash text-sm">Cash <i class="fa-solid fa-money-bill-wave ml-2"></i></span>
-                </label>
-                <label class="inline-flex items-center gap-2 p-2 rounded border">
-                  <input type="checkbox" class="pm-check" value="card" checked /> <span class="px-2 py-1 rounded pm-card text-sm">Card <i class="fa-solid fa-credit-card ml-2"></i></span>
-                </label>
-                <label class="inline-flex items-center gap-2 p-2 rounded border">
-                  <input type="checkbox" class="pm-check" value="paypal" checked /> <span class="px-2 py-1 rounded pm-paypal text-sm">PayPal <i class="fa-brands fa-paypal ml-2"></i></span>
-                </label>
-                <label class="inline-flex items-center gap-2 p-2 rounded border">
-                  <input type="checkbox" class="pm-check" value="empesa" checked /> <span class="px-2 py-1 rounded pm-empesa text-sm">E-mpesa <i class="fa-solid fa-mobile-screen-button ml-2"></i></span>
-                </label>
+              <div class="card p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <div>
+                    <div class="font-semibold">Finance targets</div>
+                    <div class="text-xs text-slate-500">Target amount and estimated days</div>
+                  </div>
+                </div>
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <input id="settingTarget" type="number" placeholder="Target amount" class="w-full p-2 border rounded" />
+                  <input id="settingEst" type="number" placeholder="Estimated days" class="w-full p-2 border rounded" />
+                </div>
+                <div class="flex justify-end mt-3">
+                  <button id="saveTargetBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Save</button>
+                </div>
               </div>
-              <div class="flex justify-end">
-                <button id="savePaymentsBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Save</button>
+
+              <div class="card p-4">
+                <div class="font-semibold mb-2">Daily rules</div>
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <input id="settingDailyMin" type="number" placeholder="Daily minimum" class="w-full p-2 border rounded" />
+                  <select id="settingCurrency" class="w-full p-2 border rounded">
+                    <option value="KES">Shillings (KES)</option>
+                    <option value="USD">US Dollar (USD)</option>
+                    <option value="EUR">Euro (EUR)</option>
+                    <option value="JPY">Yen (JPY)</option>
+                  </select>
+                </div>
+                <div class="flex justify-end mt-3">
+                  <button id="saveRulesBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Save</button>
+                </div>
               </div>
-            </div>
+            </main>
+
+            <!-- Right: small action cards -->
+            <aside class="md:col-span-3 space-y-4">
+              <div class="card p-4">
+                <div class="font-semibold">Appearance</div>
+                <div class="mt-3 flex items-center gap-3">
+                  <label class="inline-flex items-center gap-2"><input type="radio" name="appearance" value="light" id="appLight" /> <span class="text-sm">Light</span></label>
+                  <label class="inline-flex items-center gap-2"><input type="radio" name="appearance" value="dark" id="appDark" /> <span class="text-sm">Dark</span></label>
+                </div>
+                <div class="mt-3 flex justify-end">
+                  <button id="applyAppearanceBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Apply</button>
+                </div>
+              </div>
+
+              <div class="card p-4">
+                <div class="font-semibold">Payment methods</div>
+                  <div class="mt-2">
+                    <div class="relative">
+                      <button id="pmToggleBtn" class="w-full text-left px-3 py-2 border rounded flex items-center justify-between">
+                        <span class="text-sm">Select payment methods</span>
+                        <i class="fa-solid fa-chevron-down text-xs"></i>
+                      </button>
+                      <div id="pmDropdown" class="hidden absolute right-0 left-0 mt-2 bg-white dark:bg-[#042032] border rounded shadow p-3 z-50">
+                        <div class="flex flex-col gap-2">
+                          <label class="inline-flex items-center gap-2 p-2 rounded border">
+                            <input type="checkbox" class="pm-check" value="bank" /> <span class="px-2 py-1 rounded pm-bank text-sm">Bank <i class="fa-solid fa-university ml-2"></i></span>
+                          </label>
+                          <label class="inline-flex items-center gap-2 p-2 rounded border">
+                            <input type="checkbox" class="pm-check" value="cash" /> <span class="px-2 py-1 rounded pm-cash text-sm">Cash <i class="fa-solid fa-money-bill-wave ml-2"></i></span>
+                          </label>
+                          <label class="inline-flex items-center gap-2 p-2 rounded border">
+                            <input type="checkbox" class="pm-check" value="card" /> <span class="px-2 py-1 rounded pm-card text-sm">Card <i class="fa-solid fa-credit-card ml-2"></i></span>
+                          </label>
+                          <label class="inline-flex items-center gap-2 p-2 rounded border">
+                            <input type="checkbox" class="pm-check" value="paypal" /> <span class="px-2 py-1 rounded pm-paypal text-sm">PayPal <i class="fa-brands fa-paypal ml-2"></i></span>
+                          </label>
+                          <label class="inline-flex items-center gap-2 p-2 rounded border">
+                            <input type="checkbox" class="pm-check" value="empesa" /> <span class="px-2 py-1 rounded pm-empesa text-sm">E-mpesa <i class="fa-solid fa-mobile-screen-button ml-2"></i></span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                <div class="flex justify-end mt-3">
+                  <button id="savePaymentsBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Save</button>
+                </div>
+              </div>
+
+              <!-- (Password & Logout moved into General information to keep settings grouped) -->
+            </aside>
 
           </div>
 

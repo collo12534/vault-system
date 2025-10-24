@@ -43,6 +43,75 @@ function saveStore(s){ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
 let store = loadStore();
 
 /* -----------------------
+   Authentication overlay handling
+   - If a password is present in localStorage (PWD_KEY) the user must enter it
+   - If no password exists, the user must set one (first-run)
+   ----------------------- */
+let lastDay; // declared here; will be set when app initializes
+
+function authOverlayEl(){ return document.getElementById('authOverlay'); }
+function showAuthUI(){
+  const overlay = authOverlayEl();
+  if(!overlay) { initApp(); return; }
+  const stored = localStorage.getItem(PWD_KEY);
+  const title = document.getElementById('authTitle');
+  const setFields = document.getElementById('authSetFields');
+  const enterFields = document.getElementById('authEnterFields');
+  const msg = document.getElementById('authMsg');
+  const submit = document.getElementById('authSubmit');
+
+  if(!stored){
+    title.textContent = 'Set admin password';
+    setFields.classList.remove('hidden');
+    enterFields.classList.add('hidden');
+    submit.textContent = 'Set password';
+  } else {
+    title.textContent = 'Enter password';
+    setFields.classList.add('hidden');
+    enterFields.classList.remove('hidden');
+    submit.textContent = 'Enter';
+  }
+  msg.classList.add('hidden');
+  overlay.classList.remove('hidden');
+
+  submit.onclick = function(){
+    if(!localStorage.getItem(PWD_KEY)){
+      const p1 = document.getElementById('authPwd1').value || '';
+      const p2 = document.getElementById('authPwd2').value || '';
+      if(!p1){ msg.textContent = 'Password required'; msg.classList.remove('hidden'); return; }
+      if(p1 !== p2){ msg.textContent = 'Passwords do not match'; msg.classList.remove('hidden'); return; }
+      localStorage.setItem(PWD_KEY, p1);
+      hideAuthUI();
+      initApp();
+    } else {
+      const p = document.getElementById('authPwd').value || '';
+      if(p === localStorage.getItem(PWD_KEY)){
+        hideAuthUI();
+        initApp();
+      } else { msg.textContent = 'Incorrect password'; msg.classList.remove('hidden'); }
+    }
+  };
+}
+function hideAuthUI(){ const o = authOverlayEl(); if(o) o.classList.add('hidden'); }
+
+function initApp(){
+  // start the app (render + periodic rollover)
+  refreshAll();
+  // apply saved appearance immediately
+  if(store.settings && store.settings.appearance === 'dark') document.body.classList.add('dark-mode');
+  lastDay = todayYMD();
+  setInterval(()=>{
+    const now = todayYMD();
+    if(now !== lastDay){
+      lastDay = now;
+      store.messages.push({ id: uid(), type:'Day rollover', text: `New day ${now}`, date: new Date().toISOString(), level:'info' });
+      saveStore(store);
+      refreshAll();
+    }
+  }, 60_000);
+}
+
+/* -----------------------
    Admin password logic
    - First run: no password in storage -> settable at first login overlay
    - After set: must provide password to open app
@@ -87,7 +156,11 @@ sidebarBtns.forEach(b=>{
     if(p === 'settings') loadSettingsUI();
   });
 });
-document.getElementById('logoutBtn').addEventListener('click', ()=> location.reload());
+document.getElementById('logoutBtn').addEventListener('click', ()=> {
+  // show auth overlay to require re-authentication
+  if(typeof showAuthUI === 'function') showAuthUI();
+  else location.reload();
+});
 
 // Mobile sidebar toggle (off-canvas drawer)
 const mobileMenuBtn = document.getElementById('mobileMenuBtn');
@@ -236,33 +309,78 @@ function renderDashboard(){
 // Members
 function renderMembers(){
   const tbody = document.getElementById('membersTbody'); tbody.innerHTML = '';
-  store.members.forEach((m, idx)=>{
-    const saved = store.transactions.filter(t=> t.memberId===m.id).reduce((s,t)=> t.type==='deposit'? s+t.amount : s - t.amount, 0);
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td class="text-xs text-slate-500">${idx+1}</td>
-                    <td>${m.name}</td>
-                    <td>${m.phone||'—'}</td>
-                    <td class="text-xs text-slate-400">${new Date(m.joined).toLocaleDateString()}</td>
-                    <td>${fmtCurrency(saved, store.settings.currency)}</td>
-                    <td>
-                      <button class="editMemberBtn text-xs text-sky-600 px-2" data-id="${m.id}">Edit</button>
-                      <button class="delMemberBtn text-xs text-rose-600 px-2" data-id="${m.id}">Delete</button>
-                    </td>`;
-    tbody.appendChild(tr);
+
+  const query = (document.getElementById('memberSearch') || {}).value?.toLowerCase?.() || '';
+  const filtered = store.members.filter(m => {
+    if(!query) return true;
+    return (m.name || '').toLowerCase().includes(query) || (m.phone || '').toLowerCase().includes(query);
   });
 
-  // attach actions
-  document.querySelectorAll('.editMemberBtn').forEach(b=> b.addEventListener('click', e=>{
-    const id = e.target.dataset.id; openEditMemberModal(id);
-  }));
-  document.querySelectorAll('.delMemberBtn').forEach(b=> b.addEventListener('click', e=>{
+  filtered.forEach((m, idx)=>{
+    const saved = store.transactions.filter(t=> t.memberId===m.id).reduce((s,t)=> t.type==='deposit'? s+t.amount : s - t.amount, 0);
+    // main row
+    const tr = document.createElement('tr'); tr.className = 'member-row hover:bg-slate-50';
+    tr.innerHTML = `<td class="p-3 text-xs text-slate-500"><input type="checkbox" class="member-select" data-id="${m.id}" /></td>
+                    <td class="p-3 flex items-center gap-3"><div class="w-10 h-10 rounded-full overflow-hidden border-2 bg-slate-100"><img src="${m.avatar||'jlc.jpg'}" alt="avatar" class="w-full h-full object-cover"/></div><div><div class="font-semibold">${m.name || '—'}</div><div class="text-xs text-slate-400">ID: ${m.id.slice(-6)}</div></div></td>
+                    <td class="p-3"><span class="badge ${saved>0? 'badge-completed':'badge-pending'}">${saved>0 ? 'Active' : 'New'}</span></td>
+                    <td class="p-3 text-xs text-slate-400">${new Date(m.joined).toLocaleDateString()}</td>
+                    <td class="p-3 text-xs">${m.phone || '—'}</td>
+                    <td class="p-3 font-semibold">${fmtCurrency(saved, store.settings.currency)}</td>
+                    <td class="p-3 text-xs">${m.preferredMethod || '—'}</td>
+                    <td class="p-3"><button class="text-xs text-sky-600 openMemberBtn" data-id="${m.id}">Details</button></td>`;
+    tbody.appendChild(tr);
+
+    // detail row (hidden by default)
+    const trd = document.createElement('tr'); trd.className = 'member-detail hidden';
+    trd.innerHTML = `<td colspan="8" class="p-4 bg-slate-50">
+        <div class="grid md:grid-cols-3 gap-4">
+          <div>
+            <div class="font-semibold">Member info</div>
+            <div class="text-xs text-slate-500">${m.email || 'No email provided'}</div>
+            <div class="text-xs mt-2">Joined: ${new Date(m.joined).toLocaleString()}</div>
+          </div>
+          <div>
+            <div class="font-semibold">Recent activity</div>
+            <div class="text-xs text-slate-500">${store.transactions.filter(t=> t.memberId===m.id).slice(-3).reverse().map(t=> `${t.type} ${fmtCurrency(t.amount, store.settings.currency)} (${new Date(t.date).toLocaleDateString()})`).join('<br/>') || 'No activity'}</div>
+          </div>
+          <div class="text-right">
+            <div class="font-semibold">Balance</div>
+            <div class="text-xl font-bold">${fmtCurrency(saved, store.settings.currency)}</div>
+            <div class="mt-3"><button class="px-3 py-1 bg-emerald-600 text-white rounded depositQuick" data-id="${m.id}">Deposit</button> <button class="px-3 py-1 bg-rose-500 text-white rounded withdrawQuick" data-id="${m.id}">Withdraw</button></div>
+          </div>
+        </div>
+      </td>`;
+    tbody.appendChild(trd);
+  });
+
+  // actions: details toggle, edit & delete
+  document.querySelectorAll('.openMemberBtn').forEach(b=> b.addEventListener('click', e=>{
     const id = e.target.dataset.id;
-    if(!confirm('Delete member and their transactions?')) return;
-    store.members = store.members.filter(x=> x.id !== id);
-    store.transactions = store.transactions.filter(t=> t.memberId !== id);
-    store.messages.push({ id: uid(), type:'Member deleted', text:`Member deleted`, date:new Date().toISOString(), level:'danger' });
-    refreshAll();
+    // find the main row and the next detail row
+    const btn = e.target;
+    const row = btn.closest('tr');
+    if(!row) return;
+    const next = row.nextElementSibling;
+    if(next && next.classList.contains('member-detail')) next.classList.toggle('hidden');
   }));
+
+  // quick deposit/withdraw
+  document.querySelectorAll('.depositQuick').forEach(b=> b.addEventListener('click', e=>{
+    const id = e.target.dataset.id; document.getElementById('memberSelect').value = id; document.getElementById('depositBtn').click();
+  }));
+  document.querySelectorAll('.withdrawQuick').forEach(b=> b.addEventListener('click', e=>{
+    const id = e.target.dataset.id; document.getElementById('memberSelect').value = id; document.getElementById('withdrawBtn').click();
+  }));
+
+  // select all
+  const selectAll = document.getElementById('selectAllMembers');
+  if(selectAll){ selectAll.checked = false; selectAll.addEventListener('change', ()=>{
+    document.querySelectorAll('.member-select').forEach(cb=> cb.checked = selectAll.checked);
+  }); }
+
+  // wire search input (live filter)
+  const search = document.getElementById('memberSearch');
+  if(search){ search.addEventListener('input', ()=> { renderMembers(); }); }
 }
 
 // Savings page
@@ -339,27 +457,103 @@ function renderStats(){
 
 // Invoices
 function renderInvoices(){
-  const tbody = document.getElementById('invoicesTbody'); tbody.innerHTML = '';
+  // Enhanced invoices rendering: summary cards + tabs + table
+  const tbody = document.getElementById('invoicesTbody'); if(!tbody) return; tbody.innerHTML = '';
   const today = todayYMD();
-  store.members.forEach((m,idx)=>{
+  const dailyMin = Number(store.settings.dailyMin) || 0;
+
+  // compute counts & values
+  let paidCount = 0, unpaidCount = 0, overdueCount = 0, draftCount = 0;
+  store.members.forEach(m=>{
     const savedToday = store.transactions.filter(t=> t.memberId===m.id && t.type==='deposit' && t.date.slice(0,10)===today).reduce((s,t)=> s+t.amount, 0);
-    const status = savedToday === 0 ? 'Pending' : (savedToday < store.settings.dailyMin ? 'Underpaid' : 'Paid');
+    if(savedToday >= dailyMin && dailyMin > 0) paidCount++;
+    else if(savedToday === 0) unpaidCount++;
+    else if(savedToday > 0 && savedToday < dailyMin) overdueCount++;
+    else draftCount++;
+  });
+
+  document.getElementById('paidCount').textContent = paidCount;
+  document.getElementById('unpaidCount').textContent = unpaidCount;
+  document.getElementById('overdueCount').textContent = overdueCount;
+  document.getElementById('draftCount').textContent = draftCount;
+
+  document.getElementById('paidValue').textContent = fmtCurrency(paidCount * dailyMin, store.settings.currency);
+  document.getElementById('unpaidValue').textContent = fmtCurrency(unpaidCount * dailyMin, store.settings.currency);
+  document.getElementById('overdueValue').textContent = fmtCurrency(overdueCount * dailyMin, store.settings.currency);
+  document.getElementById('draftValue').textContent = fmtCurrency(draftCount * dailyMin, store.settings.currency);
+
+  // decide filter from active tab
+  const activeTab = document.querySelector('.invoices-tab.active');
+  const filter = activeTab ? activeTab.getAttribute('data-filter') : 'all';
+
+  // build list
+  const list = store.members.map((m, idx)=>{
+    const savedToday = store.transactions.filter(t=> t.memberId===m.id && t.type==='deposit' && t.date.slice(0,10)===today).reduce((s,t)=> s+t.amount, 0);
+    let status = 'Draft';
+    if(savedToday >= dailyMin && dailyMin > 0) status = 'Paid';
+    else if(savedToday === 0) status = 'Unpaid';
+    else if(savedToday > 0 && savedToday < dailyMin) status = 'Overdue';
+    return { idx, m, savedToday, status };
+  }).filter(item => {
+    if(filter === 'all') return true;
+    return item.status.toLowerCase() === filter;
+  });
+
+  // populate table
+  list.forEach((item, i)=>{
+    const m = item.m;
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td class="text-xs text-slate-500">${idx+1}</td>
+    tr.innerHTML = `<td class="text-xs text-slate-500">${i+1}</td>
                     <td>${m.name}</td>
                     <td class="text-xs text-slate-400">${new Date(today).toLocaleDateString()}</td>
-                    <td>${fmtCurrency(store.settings.dailyMin || 0, store.settings.currency)}</td>
-                    <td>${status}</td>
+                    <td>${fmtCurrency(dailyMin || 0, store.settings.currency)}</td>
+                    <td>${item.status}</td>
                     <td><button class="remindBtn text-xs text-sky-600" data-id="${m.id}">Remind</button></td>`;
     tbody.appendChild(tr);
   });
 
+  document.getElementById('invoicesCount').textContent = list.length;
+
+  // wire remind buttons
   document.querySelectorAll('.remindBtn').forEach(b=> b.addEventListener('click', e=>{
     const id = e.target.dataset.id; const member = store.members.find(m=> m.id===id);
     store.messages.push({ id: uid(), type:'Reminder', text: `${member.name} was reminded to deposit today.`, date: new Date().toISOString(), memberId: id, level: 'info' });
     refreshAll();
   }));
 }
+
+// wire invoices tabs & create button (init once)
+;(function wireInvoiceControls(){
+  // tabs
+  document.querySelectorAll('.invoices-tab').forEach(btn=> btn.addEventListener('click', (e)=>{
+    document.querySelectorAll('.invoices-tab').forEach(x=> x.classList.remove('active', 'bg-slate-100'));
+    btn.classList.add('active', 'bg-slate-100');
+    renderInvoices();
+  }));
+
+  // Create Invoice button (simple modal that records a message)
+  const createBtn = document.getElementById('createInvoiceBtn');
+  if(createBtn){ createBtn.addEventListener('click', ()=>{
+    const membersOptions = store.members.map(m=> `<option value="${m.id}">${m.name}</option>`).join('');
+    openModal('Create invoice', `<div class="space-y-2">
+      <select id="invMember" class="w-full p-2 border rounded"><option value="">-- Select client --</option>${membersOptions}</select>
+      <input id="invAmount" type="number" placeholder="Amount" class="w-full p-2 border rounded" />
+      <select id="invStatus" class="w-full p-2 border rounded"><option value="Draft">Draft</option><option value="Unpaid">Unpaid</option><option value="Paid">Paid</option></select>
+    </div>
+    `, ()=>{
+      const memberId = document.getElementById('invMember').value;
+      const amount = Number(document.getElementById('invAmount').value) || 0;
+      const status = document.getElementById('invStatus').value || 'Draft';
+      const member = store.members.find(m=> m.id===memberId);
+      store.messages.push({ id: uid(), type:'Invoice', text: `${member ? member.name : 'Unknown'} invoice ${fmtCurrency(amount, store.settings.currency)} (${status})`, date: new Date().toISOString(), memberId: memberId||null, level:'info' });
+      refreshAll();
+    }, 'Create');
+  }); }
+
+  // pagination controls - simple no-op placeholders (keeps UI consistent)
+  document.getElementById('invPrev')?.addEventListener('click', ()=> alert('Previous page (not implemented)'));
+  document.getElementById('invNext')?.addEventListener('click', ()=> alert('Next page (not implemented)'));
+})();
 
 // To-do
 function renderTodos(){
@@ -490,6 +684,24 @@ function loadSettingsUI(){
   document.getElementById('settingDailyMin').value = store.settings.dailyMin || 0;
   document.getElementById('settingCurrency').value = store.settings.currency || 'KES';
   document.querySelectorAll('.pm-check').forEach(cb => cb.checked = (store.settings.methods || []).includes(cb.value));
+
+  // profile picture
+  const preview = document.getElementById('profilePreview');
+  if(store.admin && store.admin.avatar){
+    preview.innerHTML = `<img src="${store.admin.avatar}" alt="avatar" />`;
+  } else {
+    preview.innerHTML = `<img src="jlc.jpg" alt="avatar" />`;
+  }
+
+  // name/email preview in settings left column
+  const namePreview = document.getElementById('profileNamePreview');
+  const emailPreview = document.getElementById('profileEmailPreview');
+  if(namePreview) namePreview.textContent = store.admin.name || 'Admin';
+  if(emailPreview) emailPreview.textContent = store.admin.email || (store.admin.email === '' ? 'admin@example.com' : store.admin.email);
+
+  // appearance
+  const ap = store.settings.appearance || 'light';
+  if(ap === 'dark') document.getElementById('appDark').checked = true; else document.getElementById('appLight').checked = true;
 }
 
 document.getElementById('saveAdminBtn').addEventListener('click', ()=>{
@@ -497,6 +709,32 @@ document.getElementById('saveAdminBtn').addEventListener('click', ()=>{
   const e = document.getElementById('settingAdminEmail').value.trim();
   if(!n) return alert('Admin name required');
   store.admin.name = n; store.admin.email = e;
+
+  // if an avatar file was selected, read and store it
+  const fileInput = document.getElementById('settingAvatarFile');
+  if(fileInput && fileInput.files && fileInput.files[0]){
+    const f = fileInput.files[0];
+    const reader = new FileReader();
+    reader.onload = function(ev){
+      store.admin.avatar = ev.target.result;
+      saveStore(store);
+      store.messages.push({ id: uid(), type:'Settings', text: 'Admin profile updated.', date: new Date().toISOString(), level: 'info' });
+      refreshAll();
+      // update left-column preview texts
+      const namePreview = document.getElementById('profileNamePreview');
+      const emailPreview = document.getElementById('profileEmailPreview');
+      if(namePreview) namePreview.textContent = store.admin.name || 'Admin';
+      if(emailPreview) emailPreview.textContent = store.admin.email || (store.admin.email === '' ? 'admin@example.com' : store.admin.email);
+    };
+    reader.readAsDataURL(f);
+    return; // wait for reader to finish
+  }
+  // update left-column preview texts
+  const namePreview = document.getElementById('profileNamePreview');
+  const emailPreview = document.getElementById('profileEmailPreview');
+  if(namePreview) namePreview.textContent = store.admin.name || 'Admin';
+  if(emailPreview) emailPreview.textContent = store.admin.email || (store.admin.email === '' ? 'admin@example.com' : store.admin.email);
+  
   store.messages.push({ id: uid(), type:'Settings', text: 'Admin profile updated.', date: new Date().toISOString(), level: 'info' });
   refreshAll();
 });
@@ -518,11 +756,75 @@ document.getElementById('savePaymentsBtn').addEventListener('click', ()=>{
   store.messages.push({ id: uid(), type:'Settings', text: 'Payment methods updated.', date: new Date().toISOString(), level: 'info' });
   refreshAll();
 });
+// apply appearance
+document.getElementById('applyAppearanceBtn')?.addEventListener('click', ()=>{
+  const val = document.querySelector('input[name="appearance"]:checked')?.value || 'light';
+  store.settings.appearance = val;
+  // apply immediately
+  if(val === 'dark') document.body.classList.add('dark-mode'); else document.body.classList.remove('dark-mode');
+  store.messages.push({ id: uid(), type:'Settings', text: 'Appearance updated.', date: new Date().toISOString(), level: 'info' });
+  saveStore(store); refreshAll();
+});
+
+// logout from settings
+document.getElementById('logoutBtnSettings')?.addEventListener('click', ()=>{
+  if(typeof showAuthUI === 'function') showAuthUI(); else location.reload();
+});
 document.getElementById('savePwdBtn').addEventListener('click', ()=>{
   // Password management removed in this build — clear inputs and show a message.
   document.getElementById('settingPwd1').value = ''; document.getElementById('settingPwd2').value = '';
   alert('Password feature is disabled in this build.');
 });
+
+// wire avatar file preview (show selected image before save)
+const avatarFileInput = document.getElementById('settingAvatarFile');
+if(avatarFileInput){
+  avatarFileInput.addEventListener('change', (e)=>{
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    const reader = new FileReader();
+    reader.onload = function(ev){
+      const preview = document.getElementById('profilePreview');
+      if(preview) preview.innerHTML = `<img src="${ev.target.result}" alt="avatar" />`;
+    };
+    reader.readAsDataURL(f);
+  });
+}
+
+// Payment methods dropdown behaviour
+const pmToggleBtn = document.getElementById('pmToggleBtn');
+const pmDropdown = document.getElementById('pmDropdown');
+function updatePmLabel(){
+  if(!pmToggleBtn) return;
+  const span = pmToggleBtn.querySelector('span');
+  const checked = Array.from(document.querySelectorAll('.pm-check')).filter(cb=> cb.checked).map(cb=> cb.value);
+  if(checked.length === 0) span.textContent = 'Select payment methods';
+  else if(checked.length <= 3) span.textContent = checked.map(s=> s.charAt(0).toUpperCase()+s.slice(1)).join(', ');
+  else span.textContent = `${checked.length} selected`;
+}
+
+if(pmToggleBtn && pmDropdown){
+  pmToggleBtn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    pmDropdown.classList.toggle('hidden');
+    updatePmLabel();
+  });
+
+  // close when clicking outside
+  document.addEventListener('click', (e)=>{
+    if(!pmDropdown.classList.contains('hidden')){
+      if(!pmDropdown.contains(e.target) && !pmToggleBtn.contains(e.target)) pmDropdown.classList.add('hidden');
+    }
+  });
+
+  // close on Escape
+  document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape'){ if(!pmDropdown.classList.contains('hidden')) pmDropdown.classList.add('hidden'); } });
+
+  // update label on checkbox change
+  document.querySelectorAll('.pm-check').forEach(cb=> cb.addEventListener('change', updatePmLabel));
+  // initial label
+  updatePmLabel();
+}
 
 /* -----------------------
    To Do add
@@ -577,21 +879,10 @@ document.getElementById('clearMessages').addEventListener('click', ()=> {
 document.getElementById('filterMsgs').addEventListener('click', ()=> alert('Filter placeholder: future filter UI can be added.'));
 
 /* -----------------------
-   Initial render & daily rollover
+   Initialisation is gated by authentication
+   Show password overlay (or initialize immediately if no overlay present)
    ----------------------- */
-refreshAll();
-
-// periodic check for day rollover — if day changes, create a rollover message and refresh
-let lastDay = todayYMD();
-setInterval(()=>{
-  const now = todayYMD();
-  if(now !== lastDay){
-    lastDay = now;
-    store.messages.push({ id: uid(), type:'Day rollover', text: `New day ${now}`, date: new Date().toISOString(), level:'info' });
-    saveStore(store);
-    refreshAll();
-  }
-}, 60_000);
+initApp();
 
 /* -----------------------
    Expose some helpers for debugging in console
