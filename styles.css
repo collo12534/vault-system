@@ -1,0 +1,47 @@
+/* Small visual tuning beyond default Tailwind */
+body { 
+    background: #f4f7fb; 
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; 
+}
+
+.card { 
+    background: white; 
+    box-shadow: 0 6px 18px rgba(12, 20, 35, 0.06); 
+    border-radius: 0.75rem; 
+}
+
+/* payment badge colors */
+.pm-bank { 
+    background:#e6f0ff;
+    color:#1e3a8a 
+}       /* blue */
+
+.pm-cash { 
+    background:#ecfdf5;
+    color:#065f46 
+}       /* green */
+
+.pm-card { 
+    background:#f5f3ff;
+    color:#6d28d9 
+}       /* purple */
+
+.pm-paypal { 
+    background:#eef2ff;
+    color:#0f172a 
+}     /* dark-blue look */
+
+.pm-empesa { 
+    background:#ecfdf5;
+    color:#047857 
+}     /* mpesa-green */
+
+/* modal backdrop fix */
+.modal-backdrop { 
+    background: rgba(2,6,23,0.45); 
+}
+
+/* small table fix */
+table th, table td { 
+    padding: .5rem .75rem; 
+}
