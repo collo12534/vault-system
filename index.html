@@ -3,596 +3,85 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Trustvault — Savings Management</title>
-
-  <!-- Tailwind CDN (for simplicity) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Chart.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.3.0/chart.umd.min.js"></script>
-  <!-- Font Awesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
-  <!-- Project styles (split out to styles.css) -->
+  <title>Local ISP Billing & Captive Portal Prototype</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="min-h-screen">
-
-<!-- App container -->
-<div id="app" class="flex min-h-screen">
-
-  <!-- Authentication overlay (requires password before using the app) -->
-  <div id="authOverlay" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center hidden">
-    <div class="bg-white rounded p-6 w-96 shadow">
-      <h3 id="authTitle" class="text-lg font-semibold mb-3">Enter password</h3>
-      <div id="authSetFields" class="space-y-2 hidden">
-        <input id="authPwd1" type="password" placeholder="Password" class="w-full p-2 border rounded" />
-        <input id="authPwd2" type="password" placeholder="Confirm password" class="w-full p-2 border rounded" />
-      </div>
-      <div id="authEnterFields" class="space-y-2 hidden">
-        <input id="authPwd" type="password" placeholder="Password" class="w-full p-2 border rounded" />
-      </div>
-      <div class="flex justify-end gap-2 mt-4">
-        <button id="authCancel" class="px-3 py-1 rounded border hidden">Cancel</button>
-        <button id="authSubmit" class="px-3 py-1 rounded bg-sky-600 text-white">Enter</button>
-      </div>
-      <div id="authMsg" class="text-sm text-rose-600 mt-2 hidden"></div>
+<body>
+  <header class="topbar">
+    <h1>LocalISP • Portal</h1>
+    <div class="top-actions">
+      <button id="open-admin">Admin</button>
     </div>
-  </div>
+  </header>
 
-  <!-- Sidebar (off-canvas on small screens) -->
-  <aside id="sidebar" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="sidebarTitle" class="w-64 p-6 bg-slate-900 text-white flex flex-col fixed left-0 top-0 h-full transform -translate-x-full md:translate-x-0 md:relative md:top-auto md:left-auto md:h-auto md:flex transition-transform duration-200 ease-in-out z-50">
-    <div class="flex items-center gap-3 mb-6 justify-between">
-      <div class="flex items-center gap-3">
-        <img id="siteLogo" src="jlc.jpg" alt="Trustvault logo" class="w-16 h-16 object-cover rounded-full" />
-        <div>
-        <div class="font-bold text-lg">TRUSTVAULT</div>
-        <div class="text-xs text-slate-300">Where money is safe</div>
+  <main id="root" class="container">
+    <!-- Captive portal / Login -->
+    <section id="portal" class="card">
+      <h2>Connect to Wi-Fi</h2>
+      <p>Enter phone or email to login, or redeem a voucher.</p>
+
+      <div class="form-row">
+        <input id="login-identity" placeholder="Phone or email" />
+        <button id="btn-login">Sign In</button>
       </div>
+
+      <div class="form-row">
+        <input id="voucher-code" placeholder="Voucher code (optional)" />
+        <button id="btn-redeem">Redeem Voucher</button>
       </div>
-      <!-- Close on mobile -->
-      <button id="sidebarCloseBtn" class="md:hidden text-slate-300 p-2 rounded hover:bg-white/5" aria-label="Close menu"><i class="fa-solid fa-xmark"></i></button>
+
+      <div id="portal-message" class="muted"></div>
+    </section>
+
+    <!-- Admin modal -->
+    <div id="admin-modal" class="modal hidden">
+      <div class="modal-content">
+        <button class="close" id="close-admin">&times;</button>
+        <h2>Admin Dashboard</h2>
+
+        <div class="grid">
+          <div class="card">
+            <h3>Create voucher</h3>
+            <div class="form-row">
+              <input id="voucher-value" placeholder="Minutes or MB (e.g. 60m / 500MB)" />
+              <button id="create-voucher">Create</button>
+            </div>
+            <small id="last-voucher" class="muted"></small>
+          </div>
+
+          <div class="card">
+            <h3>Users</h3>
+            <div id="user-list" class="list"></div>
+          </div>
+
+          <div class="card">
+            <h3>Billing / Deposits</h3>
+            <div class="form-row">
+              <select id="deposit-user"></select>
+              <input id="deposit-amount" placeholder="Amount (KES)" />
+              <button id="make-deposit">Deposit</button>
+            </div>
+            <div id="ledger" class="list small"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Notifications</h3>
+          <div id="notifications" class="list small"></div>
+        </div>
+      </div>
     </div>
 
-    <nav class="flex-1 space-y-1 text-sm">
-      <button data-page="dashboard" class="w-full text-left sidebar-btn active flex items-center gap-3 px-3 py-2 rounded">
-        <i class="fa-solid fa-gauge"></i><span>Dashboard</span>
-      </button>
-      <button data-page="members" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
-        <i class="fa-solid fa-users"></i><span>Members</span>
-      </button>
-      <button data-page="savings" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
-        <i class="fa-solid fa-piggy-bank"></i><span>Savings</span>
-      </button>
-      <button data-page="messages" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
-        <i class="fa-solid fa-comments"></i><span>Messages</span><span id="msgDot" class="ml-auto text-red-400 hidden"><i class="fa-solid fa-circle-exclamation"></i></span>
-      </button>
-      <button data-page="statistics" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
-        <i class="fa-solid fa-chart-line"></i><span>Statistics</span>
-      </button>
-      <button data-page="invoices" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
-        <i class="fa-regular fa-file-invoice"></i><span>Invoices</span>
-      </button>
-      <button data-page="todo" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
-        <i class="fa-solid fa-list-check"></i><span>  Notes</span>
-      </button>
-      <button data-page="finances" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
-        <i class="fa-solid fa-wallet"></i><span>Finances</span>
-      </button>
-      <button data-page="help" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
-        <i class="fa-solid fa-circle-info"></i><span>Help & Center</span>
-      </button>
-      <button data-page="settings" class="w-full text-left sidebar-btn flex items-center gap-3 px-3 py-2 rounded">
-        <i class="fa-solid fa-gear"></i><span>Settings</span>
-      </button>
-    </nav>
+    <div id="toast" class="toast hidden"></div>
+  </main>
 
-    <div class="mt-6 text-xs text-slate-400">
-      <div>Admin: <span id="adminNameShort" class="text-white">Admin</span></div>
-      <div class="mt-2">Currency: <span id="currencyShort" class="text-white">KES</span></div>
-      <button id="logoutBtn" class="mt-4 w-full bg-slate-700 text-white py-2 rounded text-sm">Log Out</button>
-    </div>
-  </aside>
-
-  <!-- Mobile header (visible on small screens) -->
-  <div class="w-full bg-transparent md:hidden p-3 flex items-center justify-between">
-    <button id="mobileMenuBtn" type="button" class="p-2 bg-white/10 text-white rounded"><i class="fa-solid fa-bars"></i></button>
-    <div class="flex items-center gap-3">
-      <div id="todayBadgeMobile" class="px-3 py-1 bg-white rounded text-slate-700 text-sm shadow">Today</div>
-      <div class="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow"><i class="fa-solid fa-user"></i></div>
-    </div>
-  </div>
-
-  <!-- Backdrop for mobile sidebar -->
-  <div id="sidebarBackdrop" class="fixed inset-0 bg-black/50 z-40 hidden md:hidden"></div>
-
-  <!-- Main content -->
-  <div id="mainContent" class="flex-1 p-6">
-    <!-- Header -->
-    <header class="flex items-center justify-between mb-6">
-      <div>
-        <h1 class="text-2xl font-semibold">Welcome Back, Alpha</h1>
-        <p class="text-sm text-slate-500">save today secure tomorrow</p>
-      </div>
-
-      <div class="flex items-center gap-3">
-        <div id="todayBadge" class="px-3 py-1 bg-white rounded text-slate-700 text-sm shadow">Today</div>
-        <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow"><i class="fa-solid fa-user"></i></div>
-      </div>
-    </header>
-
-    <!-- PAGES (single-file app) -->
-    <main id="pages" class="space-y-6">
-
-      <!-- Dashboard -->
-      <section id="page-dashboard" class="space-y-4">
-        <div class="grid grid-cols-12 gap-4">
-          <!-- KPIs -->
-          <div class="col-span-12 md:col-span-3">
-            <div class="card p-4">
-              <div class="text-xs text-slate-400">Members</div>
-              <div id="kpiMembers" class="text-xl font-bold">0</div>
-              <div class="text-xs text-slate-500">Total registered</div>
-            </div>
-          </div>
-
-          <div class="col-span-12 md:col-span-3">
-            <div class="card p-4">
-              <div class="text-xs text-slate-400">Savings</div>
-              <div id="kpiSavings" class="text-xl font-bold">KES 0</div>
-              <div class="text-xs text-slate-500">Total saved</div>
-            </div>
-          </div>
-
-          <div class="col-span-12 md:col-span-3">
-            <div class="card p-4">
-              <div class="text-xs text-slate-400">Recently Added</div>
-              <div id="kpiRecent" class="text-xl font-bold">—</div>
-              <div class="text-xs text-slate-500">Last member</div>
-            </div>
-          </div>
-
-          <div class="col-span-12 md:col-span-3">
-            <div class="card p-4">
-              <div class="text-xs text-slate-400">Target</div>
-              <div id="kpiTarget" class="text-xl font-bold">KES 0</div>
-              <div id="kpiTargetSub" class="text-xs text-slate-500">0 days est.</div>
-            </div>
-          </div>
-
-          <!-- Charts (reduced size for space) -->
-          <div class="col-span-12 md:col-span-5">
-            <div class="card p-4">
-              <div class="flex items-center justify-between">
-                <div>
-                  <div class="text-sm font-semibold">Member Savings Share</div>
-                  <div class="text-xs text-slate-500">% of total saved per member</div>
-                </div>
-                <div class="text-xs text-slate-400">Live</div>
-              </div>
-              <canvas id="donut" class="mt-3" style="max-height:200px"></canvas>
-            </div>
-          </div>
-
-          <div class="col-span-12 md:col-span-7">
-            <div class="card p-4">
-              <div class="flex items-center justify-between">
-                <div>
-                  <div class="text-sm font-semibold">Daily Performance</div>
-                  <div class="text-xs text-slate-500">Last 14 days</div>
-                </div>
-                <div class="text-xs text-slate-400">Daily</div>
-              </div>
-              <canvas id="line" class="mt-3" style="max-height:200px"></canvas>
-            </div>
-          </div>
-
-          <!-- Recent transactions (visible) -->
-          <div class="col-span-12">
-            <div class="card p-4">
-              <div class="flex items-center justify-between mb-3">
-                <div>
-                  <div class="text-sm font-semibold">Recent Transactions</div>
-                  <div class="text-xs text-slate-500">Latest deposits & withdrawals</div>
-                </div>
-                <div>
-                  <button id="clearMessages" class="text-sm bg-slate-100 px-3 py-1 rounded">Clear messages</button>
-                </div>
-              </div>
-
-              <div class="overflow-x-auto">
-                <table class="w-full text-left">
-                  <thead class="text-xs text-slate-500">
-                    <tr><th>#</th><th>Member</th><th>Type</th><th>Amount</th><th>Date</th><th>Method</th></tr>
-                  </thead>
-                  <tbody id="recentTbody" class="text-sm"></tbody>
-                </table>
-              </div>
-
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Members (new layout: search + highlighted rows with expandable details) -->
-      <section id="page-members" class="hidden">
-        <div class="card p-4">
-          <div class="flex items-center justify-between mb-4">
-            <div>
-              <h2 class="text-lg font-semibold">Members</h2>
-              <div class="text-xs text-slate-500">Overview and quick actions for members</div>
-            </div>
-            <div class="flex items-center gap-3">
-              <input id="memberSearch" placeholder="Search members..." class="p-2 border rounded text-sm" />
-              <button id="addMemberBtn" class="bg-sky-600 text-white px-3 py-1 rounded"><i class="fa-solid fa-plus mr-2"></i>Add member</button>
-            </div>
-          </div>
-
-          <div class="overflow-hidden rounded">
-            <div class="w-full overflow-x-auto">
-              <table class="w-full text-left">
-                <thead class="text-xs text-slate-500 bg-gradient-to-r from-violet-600 to-purple-500 text-white">
-                  <tr>
-                    <th class="p-3"><input id="selectAllMembers" type="checkbox" /></th>
-                    <th class="p-3">Member</th>
-                    <th class="p-3">Status</th>
-                    <th class="p-3">Joined</th>
-                    <th class="p-3">Phone / Address</th>
-                    <th class="p-3">Saved</th>
-                    <th class="p-3">Method</th>
-                    <th class="p-3">Action</th>
-                  </tr>
-                </thead>
-                <tbody id="membersTbody" class="text-sm bg-white"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Savings -->
-      <section id="page-savings" class="hidden">
-        <div class="grid md:grid-cols-3 gap-4">
-          <div class="card p-4">
-            <div class="text-sm font-semibold">Make Transaction</div>
-            <div class="text-xs text-slate-500 mb-3">Choose member and deposit/withdraw</div>
-            <select id="memberSelect" class="w-full p-2 border rounded mb-3"></select>
-
-            <div class="flex gap-2">
-              <button id="depositBtn" class="flex-1 bg-emerald-600 text-white p-2 rounded"><i class="fa-solid fa-arrow-down mr-2"></i>Deposit</button>
-              <button id="withdrawBtn" class="flex-1 bg-rose-500 text-white p-2 rounded"><i class="fa-solid fa-arrow-up mr-2"></i>Withdraw</button>
-            </div>
-
-            <div class="mt-4">
-              <div class="text-xs text-slate-400">Selected balance</div>
-              <div id="selectedBalance" class="text-lg font-semibold">KES 0</div>
-            </div>
-          </div>
-
-          <div class="card p-4 md:col-span-2">
-            <div class="text-sm font-semibold">Transactions</div>
-            <div class="text-xs text-slate-500 mb-3">All transactions</div>
-            <div class="overflow-x-auto">
-              <table class="w-full text-left">
-                <thead class="text-xs text-slate-500"><tr><th>#</th><th>Member</th><th>Type</th><th>Amount</th><th>Date</th><th>Method</th><th>Action</th></tr></thead>
-                <tbody id="transactionsTbody" class="text-sm"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Messages -->
-      <section id="page-messages" class="hidden">
-        <div class="card p-4">
-          <div class="flex items-center justify-between mb-3">
-            <div><h2 class="text-lg font-semibold">Messages</h2><div class="text-xs text-slate-500">Activity, warnings, reminders</div></div>
-            <div><button id="filterMsgs" class="px-3 py-1 bg-slate-100 rounded text-sm">Filter</button></div>
-          </div>
-
-          <div id="messagesList" class="space-y-3"></div>
-        </div>
-      </section>
-
-      <!-- Statistics -->
-      <section id="page-statistics" class="hidden">
-        <div class="card p-4">
-          <h2 class="text-lg font-semibold">Statistics</h2>
-          <div class="text-xs text-slate-500 mb-3">Member breakdown & progress</div>
-          <div id="statsList" class="space-y-2"></div>
-        </div>
-      </section>
-
-      <!-- Invoices -->
-      <section id="page-invoices" class="hidden">
-        <div class="space-y-4">
-          <div class="flex items-center justify-between">
-            <div>
-              <h2 class="text-lg font-semibold">Invoices</h2>
-              <div class="text-xs text-slate-500">Daily expected deposits status</div>
-            </div>
-            <div class="flex items-center gap-3">
-              <button id="createInvoiceBtn" class="px-4 py-2 bg-orange-500 text-white rounded text-sm">Create Invoice</button>
-            </div>
-          </div>
-
-          <!-- summary cards -->
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div class="card p-4">
-              <div class="text-sm font-semibold">Paid</div>
-              <div class="text-xs text-slate-400">Pies: <span id="paidCount">0</span></div>
-              <div id="paidValue" class="text-lg font-bold mt-2">KES 0</div>
-            </div>
-            <div class="card p-4">
-              <div class="text-sm font-semibold">Unpaid</div>
-              <div class="text-xs text-slate-400">Pies: <span id="unpaidCount">0</span></div>
-              <div id="unpaidValue" class="text-lg font-bold mt-2">KES 0</div>
-            </div>
-            <div class="card p-4">
-              <div class="text-sm font-semibold">Overdue</div>
-              <div class="text-xs text-slate-400">Pies: <span id="overdueCount">0</span></div>
-              <div id="overdueValue" class="text-lg font-bold mt-2">KES 0</div>
-            </div>
-            <div class="card p-4">
-              <div class="text-sm font-semibold">Draft</div>
-              <div class="text-xs text-slate-400">Pies: <span id="draftCount">0</span></div>
-              <div id="draftValue" class="text-lg font-bold mt-2">KES 0</div>
-            </div>
-          </div>
-
-          <!-- tabs & table -->
-          <div class="card p-4">
-            <div class="flex items-center justify-between mb-3">
-              <div class="flex items-center gap-2">
-                <button class="invoices-tab px-3 py-1 rounded bg-slate-100 text-sm" data-filter="all">All</button>
-                <button class="invoices-tab px-3 py-1 rounded text-sm" data-filter="paid">Paid</button>
-                <button class="invoices-tab px-3 py-1 rounded text-sm" data-filter="unpaid">Unpaid</button>
-                <button class="invoices-tab px-3 py-1 rounded text-sm" data-filter="overdue">Overdue</button>
-                <button class="invoices-tab px-3 py-1 rounded text-sm" data-filter="draft">Draft</button>
-              </div>
-              <div class="text-xs text-slate-400">Showing invoices</div>
-            </div>
-
-            <div class="overflow-x-auto">
-              <table class="w-full text-left">
-                <thead class="text-xs text-slate-500"><tr><th>#</th><th>Client</th><th>Create</th><th>Due</th><th>Amount</th><th>Send</th><th>Status</th></tr></thead>
-                <tbody id="invoicesTbody" class="text-sm"></tbody>
-              </table>
-            </div>
-
-            <div class="mt-4 flex items-center justify-between">
-              <div class="text-xs text-slate-500">Showing <span id="invoicesCount">0</span> invoices</div>
-              <div class="flex items-center gap-2 text-sm">
-                <button id="invPrev" class="px-2 py-1 border rounded">Previous</button>
-                <div id="invPage" class="px-3">1</div>
-                <button id="invNext" class="px-2 py-1 border rounded">Next</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- To Do -->
-      <section id="page-todo" class="hidden">
-        <div class="card p-4">
-          <div class="flex items-center justify-between mb-3">
-            <div><h2 class="text-lg font-semibold">To Do / Notes</h2><div class="text-xs text-slate-500">Notes, events, meeting minutes</div></div>
-            <div><button id="addTodoBtn" class="px-3 py-1 bg-sky-600 text-white rounded text-sm">Add note</button></div>
-          </div>
-          <div id="todoList" class="space-y-2"></div>
-        </div>
-      </section>
-
-      <!-- Finances -->
-      <section id="page-finances" class="hidden">
-        <div class="card p-4">
-          <h2 class="text-lg font-semibold">Finances</h2>
-          <div class="text-xs text-slate-500 mb-3">Target vs Achieved and today's savings</div>
-          <div class="grid grid-cols-3 gap-4">
-            <div>
-              <div class="text-xs text-slate-400">Target</div>
-              <div id="finTarget" class="font-bold text-lg">KES 0</div>
-            </div>
-            <div>
-              <div class="text-xs text-slate-400">Achieved</div>
-              <div id="finAchieved" class="font-bold text-lg">KES 0</div>
-            </div>
-            <div>
-              <div class="text-xs text-slate-400">Saved Today</div>
-              <div id="finToday" class="font-bold text-lg">KES 0</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Help & Center -->
-      <section id="page-help" class="hidden">
-        <div class="card p-4">
-          <h2 class="text-lg font-semibold">Help & Center</h2>
-          <div class="text-xs text-slate-500 mb-3">How to perform common tasks</div>
-
-          <div class="grid md:grid-cols-2 gap-3">
-            <div class="p-3 border rounded">
-              <div class="font-semibold">Add a Member</div>
-              <div class="text-xs text-slate-500">Navigate to Members → Add member → fill name & phone → Save.</div>
-            </div>
-
-            <div class="p-3 border rounded">
-              <div class="font-semibold">Deposit</div>
-              <div class="text-xs text-slate-500">Savings → Select member → Deposit → Enter amount → Choose payment method → Confirm.</div>
-            </div>
-
-            <div class="p-3 border rounded">
-              <div class="font-semibold">Withdraw</div>
-              <div class="text-xs text-slate-500">Savings → Select member → Withdraw → Enter amount (<=balance) → Confirm.</div>
-            </div>
-
-            <div class="p-3 border rounded">
-              <div class="font-semibold">Daily Minimum / Currency</div>
-              <div class="text-xs text-slate-500">Settings → Daily Rules → Change minimum and currency. Default is KES.</div>
-            </div>
-
-            <div class="p-3 border rounded col-span-2">
-              <div class="font-semibold">Navigation tips</div>
-              <div class="text-xs text-slate-500">Use the sidebar to switch pages. Dashboard shows quick KPIs and recent transactions. Settings affects system behavior.</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Settings -->
-      <section id="page-settings" class="hidden">
-        <div class="card p-4">
-          <h2 class="text-lg font-semibold">Settings</h2>
-          <div class="text-xs text-slate-500 mb-3">Admin profile, targets, daily minimum, currency, payment methods</div>
-
-          <div class="grid md:grid-cols-12 gap-4">
-            <!-- Left: avatar / quick info -->
-            <aside class="md:col-span-3">
-              <div class="card p-4 text-center">
-                <div class="mx-auto w-28 h-28 mb-3 rounded-full overflow-hidden border-2 border-white shadow" id="profilePreview"><img src="jlc.jpg" alt="avatar" class="w-full h-full object-cover" /></div>
-                <div class="font-semibold text-lg" id="profileNamePreview">Admin</div>
-                <div class="text-xs text-slate-500 mb-3" id="profileEmailPreview">admin@example.com</div>
-                <div class="space-y-2">
-                  <label class="block text-xs text-slate-500">Change picture</label>
-                  <input id="settingAvatarFile" type="file" accept="image/*" class="w-full text-xs" />
-                </div>
-              </div>
-            </aside>
-
-            <!-- Center: main settings cards -->
-            <main class="md:col-span-6 space-y-4">
-              <div class="card p-4">
-                <div class="flex items-center justify-between mb-3">
-                  <div>
-                    <div class="font-semibold">General information</div>
-                    <div class="text-xs text-slate-500">Update admin name and contact</div>
-                  </div>
-                  <div class="text-xs text-slate-400">Editable</div>
-                </div>
-                      <div class="grid grid-cols-1 gap-3">
-                        <input id="settingAdminName" placeholder="Admin name" class="w-full p-2 border rounded" />
-                        <input id="settingAdminEmail" placeholder="Admin email" class="w-full p-2 border rounded" />
-
-                        <!-- Moved: Admin password & logout (was on right column) -->
-                        <div class="mt-3 p-3 border rounded">
-                          <div class="font-semibold text-sm mb-2">Admin password</div>
-                          <input id="settingPwd1" type="password" placeholder="New admin password" class="w-full p-2 border rounded mb-2" />
-                          <input id="settingPwd2" type="password" placeholder="Confirm password" class="w-full p-2 border rounded" />
-                          <div class="flex justify-between items-center mt-3">
-                            <div class="text-xs text-slate-500">Change your admin password</div>
-                            <div class="flex items-center gap-2">
-                              <button id="savePwdBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Change</button>
-                              <button id="logoutBtnSettings" class="px-3 py-1 border rounded">Log out</button>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div class="flex justify-end">
-                          <button id="saveAdminBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Save profile</button>
-                        </div>
-                      </div>
-              </div>
-
-              <div class="card p-4">
-                <div class="flex items-center justify-between mb-3">
-                  <div>
-                    <div class="font-semibold">Finance targets</div>
-                    <div class="text-xs text-slate-500">Target amount and estimated days</div>
-                  </div>
-                </div>
-                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <input id="settingTarget" type="number" placeholder="Target amount" class="w-full p-2 border rounded" />
-                  <input id="settingEst" type="number" placeholder="Estimated days" class="w-full p-2 border rounded" />
-                </div>
-                <div class="flex justify-end mt-3">
-                  <button id="saveTargetBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Save</button>
-                </div>
-              </div>
-
-              <div class="card p-4">
-                <div class="font-semibold mb-2">Daily rules</div>
-                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <input id="settingDailyMin" type="number" placeholder="Daily minimum" class="w-full p-2 border rounded" />
-                  <select id="settingCurrency" class="w-full p-2 border rounded">
-                    <option value="KES">Shillings (KES)</option>
-                    <option value="USD">US Dollar (USD)</option>
-                    <option value="EUR">Euro (EUR)</option>
-                    <option value="JPY">Yen (JPY)</option>
-                  </select>
-                </div>
-                <div class="flex justify-end mt-3">
-                  <button id="saveRulesBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Save</button>
-                </div>
-              </div>
-            </main>
-
-            <!-- Right: small action cards -->
-            <aside class="md:col-span-3 space-y-4">
-              <div class="card p-4">
-                <div class="font-semibold">Appearance</div>
-                <div class="mt-3 flex items-center gap-3">
-                  <label class="inline-flex items-center gap-2"><input type="radio" name="appearance" value="light" id="appLight" /> <span class="text-sm">Light</span></label>
-                  <label class="inline-flex items-center gap-2"><input type="radio" name="appearance" value="dark" id="appDark" /> <span class="text-sm">Dark</span></label>
-                </div>
-                <div class="mt-3 flex justify-end">
-                  <button id="applyAppearanceBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Apply</button>
-                </div>
-              </div>
-
-              <div class="card p-4">
-                <div class="font-semibold">Payment methods</div>
-                  <div class="mt-2">
-                    <div class="relative">
-                      <button id="pmToggleBtn" class="w-full text-left px-3 py-2 border rounded flex items-center justify-between">
-                        <span class="text-sm">Select payment methods</span>
-                        <i class="fa-solid fa-chevron-down text-xs"></i>
-                      </button>
-                      <div id="pmDropdown" class="hidden absolute right-0 left-0 mt-2 bg-white dark:bg-[#042032] border rounded shadow p-3 z-50">
-                        <div class="flex flex-col gap-2">
-                          <label class="inline-flex items-center gap-2 p-2 rounded border">
-                            <input type="checkbox" class="pm-check" value="bank" /> <span class="px-2 py-1 rounded pm-bank text-sm">Bank <i class="fa-solid fa-university ml-2"></i></span>
-                          </label>
-                          <label class="inline-flex items-center gap-2 p-2 rounded border">
-                            <input type="checkbox" class="pm-check" value="cash" /> <span class="px-2 py-1 rounded pm-cash text-sm">Cash <i class="fa-solid fa-money-bill-wave ml-2"></i></span>
-                          </label>
-                          <label class="inline-flex items-center gap-2 p-2 rounded border">
-                            <input type="checkbox" class="pm-check" value="card" /> <span class="px-2 py-1 rounded pm-card text-sm">Card <i class="fa-solid fa-credit-card ml-2"></i></span>
-                          </label>
-                          <label class="inline-flex items-center gap-2 p-2 rounded border">
-                            <input type="checkbox" class="pm-check" value="paypal" /> <span class="px-2 py-1 rounded pm-paypal text-sm">PayPal <i class="fa-brands fa-paypal ml-2"></i></span>
-                          </label>
-                          <label class="inline-flex items-center gap-2 p-2 rounded border">
-                            <input type="checkbox" class="pm-check" value="empesa" /> <span class="px-2 py-1 rounded pm-empesa text-sm">E-mpesa <i class="fa-solid fa-mobile-screen-button ml-2"></i></span>
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                <div class="flex justify-end mt-3">
-                  <button id="savePaymentsBtn" class="px-3 py-1 bg-sky-600 text-white rounded">Save</button>
-                </div>
-              </div>
-
-              <!-- (Password & Logout moved into General information to keep settings grouped) -->
-            </aside>
-
-          </div>
-
-        </div>
-      </section>
-
-    </main>
-
-  <footer class="mt-6 text-xs text-slate-400"></footer>
-  </div>
-</div>
-
-<!-- Modals & Login -->
-<div id="modalRoot"></div>
-
-<!-- Login overlay removed (password barrier disabled) -->
-
-<!-- Minimal JS: app logic -->
-<script src="App.js"></script>
+  <script src="app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+<script>
+  (function() {
+    emailjs.init("YOUR_PUBLIC_KEY"); // Replace with your EmailJS Public Key
+  })();
+</script>
 
 </body>
 </html>
